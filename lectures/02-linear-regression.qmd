@@ -1,0 +1,271 @@
+---
+title: "Linear Regression"
+---
+
+Linear regression is the first complete statistical learning workflow:
+specification, estimation, interpretation, diagnostics, uncertainty,
+and prediction. It is simple enough to study carefully and rich enough
+to introduce most habits used throughout the course.
+
+## Learning Objectives
+
+- Write simple and multiple linear regression models.
+- Interpret coefficients for continuous variables, categorical
+  variables, and interactions.
+- Explain least squares as loss minimization.
+- Evaluate a regression model with residual diagnostics and held-out
+  prediction error.
+- Translate a fitted model into a clear substantive statement.
+
+## Least Squares Regression
+
+The multiple linear regression model has the form
+
+$$
+\begin{align}
+Y_i = \beta_0 + \beta_1X_{i1} + \cdots + \beta_pX_{ip}
++ \epsilon_i.
+\end{align}
+$$
+
+Ordinary least squares chooses coefficients that minimize residual sum
+of squares:
+
+$$
+\begin{align}
+\hat{\beta} =
+\arg\min_{\beta}
+\sum_{i=1}^{n}(y_i - x_i^\top\beta)^2.
+\end{align}
+$$
+
+The fitted value is $\hat y_i = x_i^\top\hat\beta$, and the residual is
+$e_i = y_i - \hat y_i$. A coefficient estimates the expected change in
+the response for a one-unit increase in that predictor, holding the
+other predictors in the model fixed. That "holding fixed" phrase is
+essential: coefficient meaning depends on the full model specification.
+
+## Advertising Model Sequence
+
+The advertising data provide a compact way to move from simple
+regression to multiple regression. Suppose `sales` is the response and
+`TV`, `radio`, and `newspaper` are advertising budgets.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+set.seed(571)
+advertising <- data.frame(
+  TV = runif(200, 0, 300),
+  radio = runif(200, 0, 50),
+  newspaper = runif(200, 0, 100)
+)
+advertising$sales <- 3 +
+  0.045 * advertising$TV +
+  0.19 * advertising$radio +
+  0.002 * advertising$TV * advertising$radio +
+  rnorm(200, sd = 2)
+
+tv_fit <- lm(sales ~ TV, data = advertising)
+media_fit <- lm(sales ~ TV + radio + newspaper, data = advertising)
+interaction_fit <- lm(sales ~ TV * radio + newspaper, data = advertising)
+
+summary(tv_fit)
+summary(media_fit)
+summary(interaction_fit)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: true
+#| fig-align: center
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+
+rng = np.random.default_rng(571)
+advertising = pd.DataFrame({
+    "TV": rng.uniform(0, 300, 200),
+    "radio": rng.uniform(0, 50, 200),
+    "newspaper": rng.uniform(0, 100, 200),
+})
+advertising["sales"] = (
+    3
+    + 0.045 * advertising["TV"]
+    + 0.19 * advertising["radio"]
+    + 0.002 * advertising["TV"] * advertising["radio"]
+    + rng.normal(0, 2, 200)
+)
+
+tv_fit = smf.ols("sales ~ TV", data=advertising).fit()
+media_fit = smf.ols("sales ~ TV + radio + newspaper", data=advertising).fit()
+interaction_fit = smf.ols(
+    "sales ~ TV * radio + newspaper",
+    data=advertising
+).fit()
+
+print(tv_fit.summary())
+print(media_fit.summary())
+print(interaction_fit.summary())
+```
+
+:::
+
+The simple model asks whether `TV` budget alone predicts sales. The
+multiple regression model asks whether each medium explains variation
+after accounting for the others. The interaction model asks whether the
+effect of one medium changes as another medium changes.
+
+## Train/Test Evaluation
+
+Regression teaching often begins with coefficient tables, but
+prediction requires held-out evaluation. Split before comparing
+candidate models:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+set.seed(571)
+id <- sample(seq_len(nrow(advertising)), size = 0.8 * nrow(advertising))
+train <- advertising[id, ]
+test <- advertising[-id, ]
+
+fit <- lm(sales ~ TV + radio + newspaper, data = train)
+pred <- predict(fit, newdata = test)
+
+rmse <- sqrt(mean((test$sales - pred)^2))
+test_r2 <- 1 - sum((test$sales - pred)^2) /
+  sum((test$sales - mean(test$sales))^2)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: true
+#| fig-align: center
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+import statsmodels.formula.api as smf
+
+train, test = train_test_split(
+    advertising,
+    train_size=0.8,
+    random_state=571
+)
+
+fit = smf.ols("sales ~ TV + radio + newspaper", data=train).fit()
+pred = fit.predict(test)
+
+rmse = mean_squared_error(test["sales"], pred) ** 0.5
+test_r2 = r2_score(test["sales"], pred)
+
+print({"rmse": rmse, "test_r2": test_r2})
+```
+
+:::
+
+Residual standard error describes typical residual size in the training
+data. Test RMSE describes typical prediction error on observations not
+used to estimate the coefficients. Both can be useful, but they answer
+different questions.
+
+## Interactions and Marginal Effects
+
+An interaction lets the effect of one predictor depend on another:
+
+$$
+\operatorname{E}(Y \mid X,Z)
+= \beta_0 + \beta_1X + \beta_2Z + \beta_3XZ.
+$$
+
+The marginal effect of $X$ is
+
+$$
+\frac{\partial \operatorname{E}(Y \mid X,Z)}{\partial X}
+= \beta_1 + \beta_3Z.
+$$
+
+After an interaction is included, the main effect of $X$ is the effect
+when $Z=0$. If $Z=0$ is not meaningful, centering $Z$ can make the main
+effect easier to interpret.
+
+## Diagnostics and Influence
+
+Diagnostics convert assumptions into visible questions:
+
+| Diagnostic | Question |
+|---|---|
+| Residuals vs. fitted values | Is the mean structure missing curvature or interactions? |
+| Scale-location plot | Does residual spread change across fitted values? |
+| Normal Q-Q plot | Are uncertainty summaries sensitive to tail behavior? |
+| Leverage | Are some predictor combinations unusual? |
+| Cook's distance | Are individual observations strongly changing the fit? |
+| Correlation or VIF | Are coefficients unstable because predictors overlap? |
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+par(mfrow = c(2, 2))
+plot(fit)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: true
+#| fig-align: center
+import matplotlib.pyplot as plt
+import scipy.stats as stats
+
+residuals = fit.resid
+fitted = fit.fittedvalues
+
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+axes[0].scatter(fitted, residuals)
+axes[0].axhline(0, color="black", linewidth=1)
+axes[0].set_xlabel("Fitted values")
+axes[0].set_ylabel("Residuals")
+stats.probplot(residuals, dist="norm", plot=axes[1])
+plt.tight_layout()
+plt.show()
+```
+
+:::
+
+The goal is not to make every plot perfect. The goal is to notice
+model-data disagreement and decide whether it changes the claim.
+
+## Coefficient Interpretation
+
+Good interpretation follows a stable template:
+
+1. name the response scale,
+2. name the predictor and unit change,
+3. state the direction and magnitude,
+4. state what is held fixed,
+5. avoid causal language unless the design supports it.
+
+For example: holding radio and newspaper budgets fixed, an additional
+unit of TV advertising budget is associated with an estimated increase
+of $\hat\beta_1$ sales units. This is an association from an
+observational regression, not by itself proof that changing TV spending
+would cause the same change in sales.

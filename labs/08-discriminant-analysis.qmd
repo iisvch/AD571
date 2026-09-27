@@ -1,0 +1,262 @@
+---
+title: "Lab 08: Discriminant Analysis"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+ Support Packages
+
+Please hide/remove the unnecessary support packages/functions. My `ggplot` theme parameters are removed. You can use them from the previous lab and assignment. Please remember the goal for giving you the theme skeleton is make you design yours. Although, **Beauty Lies in the Eye of the Beholder**.
+
+```{r support, warning=FALSE,message=FALSE,include=TRUE}
+require(MASS)
+require(glmnet)
+library(flextable)
+library(leaps)
+library(caret)
+library(readr)
+library(reticulate)
+library(corrplot)
+library(ggfortify)
+library(MASS)
+library(zoo)
+library(lubridate)
+library(reshape2)
+library(data.table)
+library(klaR)
+library(feather)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("weights", "interactions", "cjoint", "plm", "interactions", "jtools", "stats", "miceadds", "broom", "RColorBrewer", "ggstatsplot", "ggpubr", "stargazer", "sandwich", "hrbrthemes", "rms", "interplot", "coefplot", "gmodels", "car", "lattice","foreign", "ggplot2", "MASS", "Hmisc", "reshape2", "oddsratio", "tidyr", "psych", "dplyr", "tidyverse", "cjoint", "ISLR","ISLR2","kableExtra","ggExtra","gridExtra")
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+```
+
+# Data Import and Cleaning and Exploration.
+
+All the data is cleaned and no pre/post processing is needed. I have the complete data file but I haven't had a chance to look at it. The `DoS_Tiny` dataset refers to a Denial of service attack (DDOS==hacking, sort of) using a tool named slowloris. This is very fascinating because one person or a team cannot detect these kinda of attacks. To make sure that the server remain operational companies like Amazon, Google, Facebook, etc. use Automated **Intrusion Detection System**. The system essentially scans the incoming port (internet ports for server requests) and records the activity in multiple variables. The four variables of importance are:
+
+- Flow Duration - Length of connection in seconds
+- Flow IAT Mean - Packets flow inter arrival time Mean
+- Flow IAT Min - Packets flow inter arrival time Min.
+- Bwd IAT Mean - Backward inter arrival time, the time between two packets sent backward Mean.
+
+A packet is then labeled to be "Benign" or "DOS slowloris" Our job is to train a model to make it better.
+
+```{r}
+set.seed(16856)
+
+ds_DoS <- data.frame(read.csv("./dados/DOS_Tiny.csv",sep = "\t"))
+ds_DoS$Label <- as.factor(ds_DoS$Label)
+row.train = sample(1:nrow(ds_DoS),0.8*nrow(ds_DoS))
+ds_train_DoS <- ds_DoS[row.train,]
+ds_test_DoS <- ds_DoS[-row.train,]
+
+kable(head(ds_DoS)) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+```
+
+# Linear discriminant analysis (LDA): 
+Uses linear combinations of predictors to predict the class of a given observation. Assumes that the predictor variables (p) are normally distributed and the classes have identical variances (for univariate analysis, p = 1) or identical covariance matrices (for multivariate analysis, p > 1).
+
+```{r lda}
+linear <-  lda(Label~., data = ds_train_DoS)
+kable(linear$means) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+kable(linear$scaling) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+```
+
+## Plot hist
+
+```{r hist, fig.align='center', fig.height=6, fig.width=4.2}
+library(ggord)
+p <- predict(linear, ds_test_DoS)
+ldahist(data = p$x[,1], g = ds_test_DoS$Label,col ="#ACD1E9" )
+# ggord(linear, ds_train_DoS$Label)
+```
+
+## Plot partion matrix
+
+
+```{r partmat, fig.align='center', fig.height=12, fig.width=8}
+partimat(Label~., data = ds_test_DoS, method = "lda",col.correct="#028482",col.wrong="#990033",image.colors	
+=c("#E8D0A9","#ACD1E9"),nplots.vert=3,nplots.hor=2)
+
+```
+
+
+
+## Plot confusion matrix and explain the results
+
+[Use this for confusion matrix](https://cran.r-project.org/web/packages/cvms/vignettes/Creating_a_confusion_matrix.html)
+
+
+# Quadratic discriminant analysis (QDA): 
+
+More flexible than LDA. Here, there is no assumption that the covariance matrix of classes is the same.
+
+
+```{r qda}
+quadratic <-  qda(Label~., data = ds_train_DoS)
+kable(quadratic$means) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+kable(quadratic$scaling) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+```
+
+## Plot hist
+
+```{r qhist, fig.align='center', fig.height=6, fig.width=4.2}
+library(ggord)
+q <- predict(quadratic, ds_test_DoS)
+ldahist(data = q$posterior[,2], g = ds_test_DoS$Label,col ="#ACD1E9" )
+# ggord(linear, ds_train_DoS$Label)
+```
+
+## Plot partion matrix
+
+
+```{r qpartmat, fig.align='center', fig.height=12, fig.width=8}
+partimat(Label~., data = ds_test_DoS, method = "qda",col.correct="#028482",col.wrong="#990033",image.colors	
+=c("#E8D0A9","#ACD1E9"),nplots.vert=3,nplots.hor=2)
+
+```
+
+
+## Plot confusion matrix and explain the results
+
+[Use this for confusion matrix](https://cran.r-project.org/web/packages/cvms/vignettes/Creating_a_confusion_matrix.html)
+
+
+# Mixture discriminant analysis (MDA): 
+
+Each class is assumed to be a Gaussian mixture of sub-classes.
+
+
+```{r mda}
+library(mda)
+
+mixture <-  mda(Label~., data = ds_train_DoS)
+kable(mixture$means) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+kable(mixture$fit$coefficients) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+```
+
+## Plot hist
+
+```{r mhist, fig.align='center', fig.height=6, fig.width=4.2}
+m <- predict(mixture, ds_test_DoS)
+# hist()
+# ldahist(data = m, g = ds_test_DoS$Label,col ="#ACD1E9" )
+# ggord(linear, ds_train_DoS$Label)
+```
+
+
+
+
+## Plot confusion matrix and explain the results
+
+[Use this for confusion matrix](https://cran.r-project.org/web/packages/cvms/vignettes/Creating_a_confusion_matrix.html)
+
+
+<!-- # Flexible discriminant analysis - FDA -->
+
+<!-- FDA is a flexible extension of LDA that uses non-linear combinations of predictors such as splines. FDA is useful to model multivariate non-normality or non-linear relationships among variables within each group, allowing for a more accurate classification. -->
+
+<!-- ```{r fda} -->
+<!-- library(mda) -->
+<!-- # Fit the model -->
+<!-- flexible <- fda(Label~., data = ds_train_DoS) -->
+<!-- # Make predictions -->
+<!-- predicted.classes <- flexible %>% predict(ds_test_DoS) -->
+<!-- # Model accuracy -->
+<!-- mean(predicted.classes == ds_test_DoS$Label) -->
+<!-- ``` -->
+
+
+
+# Regularized discriminant anlysis (RDA): 
+
+Regularization (or shrinkage) improves the estimate of the covariance matrices in situations where the number of predictors is larger than the number of samples in the training data. This leads to an improvement of the discriminant analysis.
+
+
+```{r rda}
+library(mda)
+regu <-  rda(Label~., data = ds_train_DoS)
+kable(regu$means) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+kable(regu$scaling) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+```
+
+## Plot hist
+
+```{r rhist, fig.align='center', fig.height=6, fig.width=4.2}
+q <- predict(regu, ds_test_DoS)
+ldahist(data = q$posterior[,2], g = ds_test_DoS$Label,col ="#ACD1E9" )
+# ggord(linear, ds_train_DoS$Label)
+```
+
+## Plot partion matrix
+
+
+```{r rpartmat, fig.align='center', fig.height=12, fig.width=8}
+partimat(Label~., data = ds_test_DoS, method = "rda",col.correct="#028482",col.wrong="#990033",image.colors	
+=c("#E8D0A9","#ACD1E9"),nplots.vert=3,nplots.hor=2) #plot.matrix=T
+``` 
+
+
+
+## Plot confusion matrix and explain the results
+
+[Use this for confusion matrix](https://cran.r-project.org/web/packages/cvms/vignettes/Creating_a_confusion_matrix.html)
+
+# Explain difference between the results of Linear discriminant analysis (LDA), 4 Quadratic discriminant analysis (QDA), Mixture discriminant analysis (MDA), and Regularized discriminant anlysis (RDA)
+
+
+# Python companion
+
+Logistic regression, LDA, and QDA can be compared with the same train/test split and the same confusion-matrix metrics.
+
+```python
+import pandas as pd
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+
+df = pd.read_csv("data/lab08.csv")
+X = df.drop(columns="y")
+y = df["y"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, stratify=y, random_state=571)
+
+models = {
+    "logistic": Pipeline([("scale", StandardScaler()), ("model", LogisticRegression(max_iter=1000))]),
+    "lda": LinearDiscriminantAnalysis(),
+    "qda": QuadraticDiscriminantAnalysis(),
+}
+
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    pred = model.predict(X_test)
+    print(name)
+    print(confusion_matrix(y_test, pred))
+    print(classification_report(y_test, pred))
+```
+

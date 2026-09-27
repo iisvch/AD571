@@ -1,0 +1,232 @@
+---
+title: "Lab 07: OLS and Logistic Regression"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+ Support Packages
+
+Please hide/remove the unnecessary support packages/functions. My `ggplot` theme parameters are removed. You can use them from the previous lab and assignment. Please remember the goal for giving you the theme skeleton is make you design yours. Although, **Beauty Lies in the Eye of the Beholder**.
+
+```{r support, warning=FALSE,message=FALSE,include=TRUE}
+require(MASS)
+require(glmnet)
+library(flextable)
+library(leaps)
+library(caret)
+library(readr)
+library(reticulate)
+library(corrplot)
+library(ggfortify)
+library(zoo)
+library(lubridate)
+library(reshape2)
+library(data.table)
+library(feather)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("weights", "interactions", "cjoint", "plm", "interactions", "jtools", "stats", "miceadds", "broom", "RColorBrewer", "ggstatsplot", "ggpubr", "stargazer", "sandwich", "hrbrthemes", "rms", "interplot", "coefplot", "gmodels", "car", "lattice","foreign", "ggplot2", "MASS", "Hmisc", "reshape2", "oddsratio", "tidyr", "psych", "dplyr", "tidyverse", "cjoint", "ISLR","ISLR2","kableExtra","ggExtra","gridExtra")
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+```
+
+# Data Import and Cleaning and Exploration.
+
+- Import the compliance data.
+- Import survival data.
+- Merge the two files by `country`
+- This will create a large Anti-Money laundering dataframe, say, `AML`.
+- Using `Legal`,`LegalMax`,`Institutional`,`InstitutionalMax`,`Preventive`,`PreventativeMax`,`All`,`AllMax` calculate, `PrevN`,`InstN`,`LegalN`,`AllN`, See eqs. below.
+- Drop columns (or subset dataset without these), `filename`, `firstday`, `reimbursed`, `lastday`,`Legal`,`LegalMax`,`Institutional`,`InstitutionalMax`,`Preventive`,`PreventativeMax`,`All`,`AllMax`.
+
+
+```{r}
+#read in survival table
+survex3<-read.table("sdatamodCC.csv",sep=",",header=T)
+survex3$dailyvol<-survex3$totalvol/survex3$lifetime
+
+#anti-money laundering indicators
+aml<-read.table("compliance-aml-cft-whole.csv",sep=",",header=T)
+amls<-merge(survex3,aml,by="Country")
+
+amls$PrevN<-amls$Preventive/amls$PreventativeMax
+amls$InstN<-amls$Institutional/amls$InstitutionalMax
+amls$LegalN<-amls$Legal/amls$LegalMax
+amls$AllN<-amls$All/amls$AllMax
+
+amlsv<-amls[!is.na(amls$dailyvol),];
+row.names(amlsv)<-amlsv$exchange
+
+amlsv$lifemo<-amlsv$lifetime/30.#recreate table 1
+```
+
+# Ordinary Least Squares Regression and Logistic regression
+
+- For the merged dataset use `Hacked` as the dependent variable and `log(dailyvol)` and `lifemo` as the independent variables.
+- Perform the linear regression (OLS). The variable `Hacked` is a string of TRUE or FALSE so convert it to numerical 0 or 1, Do not convert it to category.
+- Perform Least Squares and logistic using `glm` library. Least Squares `family` is `gaussian` while Logistic `family` is `binomial` with `logit` link.
+- Stargazer
+- You will see the parameters of both regression. Explain the difference in these two models. The details should cover
+  - variable relations between Y and X in mathematical format.
+  - Comparison of R-squared/AIC/BIC/LL or any available appropriate matrix discussing which model is better. Please make sure that you also take the variable value (0,1) in account while describing this.
+  
+$$
+\begin{align}
+Y &=  \beta_{0}+ \beta_{1}\times \log(dailyvol)+ \beta_{2} \times lifemo\\
+\frac{p(Y)}{(1-p(Y))}  &= exp(\beta_{0}+ \beta_{1}\times \log(dailyvol)+ \beta_{2} \times lifemo)\\
+p(Y)&= \frac{exp(\beta_{0}+ \beta_{1}\times \log(dailyvol)+ \beta_{2} \times lifemo)}{1+exp(\beta_{0}+ \beta_{1}\times \log(dailyvol)+ \beta_{2} \times lifemo)}
+\end{align}
+$$
+
+```{r daatachunk, results='asis'}
+amlsv$exchange[!is.na(amlsv$Hacked)&!is.na(amlsv$dailyvol)];
+amlsv$Hacked_Num<-ifelse(amlsv$Hacked=="TRUE",1,0);
+
+mod01 <- glm(Hacked_Num ~ log(dailyvol), data=amlsv, family = gaussian)
+mod02 <- glm(Hacked_Num ~ lifemo, data=amlsv, family = gaussian)
+mod03 <- glm(Hacked_Num ~ log(dailyvol)+ lifemo, data=amlsv, family = gaussian)
+
+hlogit01 <- glm(Hacked ~ log(dailyvol), data = amlsv, family = binomial(link="logit"))
+hlogit02 <- glm(Hacked ~ lifemo, data = amlsv, family = binomial(link="logit"))
+hlogit03 <- glm(Hacked ~ log(dailyvol) + lifemo, data = amlsv, family = binomial(link="logit"))
+stargazer::stargazer(mod01,mod02,mod03,hlogit01,hlogit02,hlogit03, type='html', summary=TRUE,report = "vc*stp",ci=TRUE)
+
+amlsv$hl1_pred <- predict(hlogit01, newdata=amlsv, type="response")
+amlsv$hl2_pred <- predict(hlogit02, newdata=amlsv, type="response")
+amlsv$hl3_pred <- predict(hlogit03, newdata=amlsv, type="response")
+
+```
+
+# Visuallizing the models
+
+Plot 4 graphs, 2 for each models containing one dependent variable against the dependent variable. Overlay the appropriate model from above over all four plots. Explain the behavior of the line and suggest why one model is a better fit than the other.
+
+- Plot `Hacked_Num` Vs. `log(dailyvol)`+ OLS line
+- Plot `Hacked_Num` Vs. `lifemo` + OLS Line
+- Plot `Hacked` Vs. `log(dailyvol)`+ Logit line
+- Plot `Hacked` Vs. `lifemo`+ logit line
+- have a sub figure labels (a, b....)
+- have a caption
+- center align figure
+
+```{r chunk03, fig.align='center', fig.height=7, fig.width=9, fig.cap="This is fig (a) for ols daily vol, (b) ols life mo"}
+p1 <- ggplot(amlsv, aes(x=log(dailyvol), y=Hacked_Num)) + 
+  geom_point(color="#69b3a2") +labs(x="Log of Avg. Daily Volume\n(a)",y="Hacked (Numerical)")+
+  geom_smooth(method = "lm", se=FALSE, color="#990033", formula = "y~x")+
+  theme(legend.title = element_blank())+
+  theme_bw();
+
+p2 <- ggplot(amlsv, aes(x=lifemo, y=Hacked_Num)) + 
+  geom_point(color="#69b3a2") +labs(x="Lifetime (in Months)\n(b)",y="Hacked (Numerical)")+
+  geom_smooth(method = "lm", se = FALSE, col= "#990033", formula = "y~x")+
+  theme(legend.title = element_blank())+
+  theme_bw();
+
+p3 <- ggplot(amlsv, aes(x=log(dailyvol), y=Hacked_Num)) + 
+  geom_point(color="#69b3a2") +labs(x="Log of Avg. Daily Volume\n(c)",y="Hacked (Categorical)")+
+  geom_smooth(method = "glm", method.args= list(family="binomial"),se=F, col= "#990033")+
+  theme(legend.title = element_blank())+
+  theme_bw();
+
+p4 <- ggplot(amlsv, aes(x=lifemo, y=Hacked_Num)) + 
+  geom_point(color="#69b3a2") +labs(x="Lifetime (in Months)\n(d)",y="Hacked (Categorical)")+
+  geom_smooth(method = "glm", aes(x = lifemo, y = hl2_pred),method.args= list(family="binomial"), se=F, col= "#990033")+  
+  theme(legend.title = element_blank())+
+  theme_bw();
+ggarrange(p1, p2, p3, p4,
+          ncol = 2, nrow = 2)
+```
+
+# Predict using the models generated above
+
+- We need to now create a dataframe that mimics the dataset. 
+- Use `lifetime` to be `rnorm(10000,365, 60)` and `lifemo` to be `lifetime/30.`
+- Use `sequence` of 2 to 50000, with `length.out= 10000` to generate `dailyvol`
+
+```{r chunk3, results='asis', fig.align='center', fig.height=7, fig.width=9}
+set.seed(1685)
+
+#get predictions for hacking probability for hypothetical daily transaction volumes
+newdata1 <- with(amlsv, data.frame(lifetime = rnorm(10000,365, 60), dailyvol=seq(from = 2, to = 50000, length.out = 10000)))
+newdata1$lifemo<-newdata1$lifetime/30 #recreate table 1
+newdata1$rankP <- predict(hlogit03, newdata = newdata1, type = "response")
+newdata1$Hacked[newdata1$rankP <=0.4999] = "FALSE"
+newdata1$Hacked[newdata1$rankP >0.500  ] = "TRUE"
+newdata1$Hacked_Num<-ifelse(newdata1$Hacked=="TRUE",1,0);
+
+newdata1$glmPred_1 <- predict(mod01, data=newdata1)
+newdata1$glmPred_2 <- predict(mod02, data=newdata1)
+newdata1$glmPred_3 <- predict(mod03, data=newdata1)
+
+p5 <- ggplot(newdata1, aes(x=log(dailyvol), y=Hacked_Num)) + 
+  geom_point(color="#69b3a2") +labs(x="Log of Avg. Daily Volume\n(a)",y="Hacked (Numerical)")+
+  geom_smooth(method = "lm",aes(x=log(dailyvol), y=rankP), se = FALSE, col= "#990033", formula = "y~x")+
+  theme(legend.title = element_blank())+
+  theme_bw();
+
+p6 <- ggplot(newdata1, aes(x=lifemo, y=Hacked_Num)) + 
+  geom_point(color="#69b3a2") +labs(x="Lifetime (in Months)\n(b)",y="Hacked (Numerical)")+
+  geom_smooth(method = "lm",aes(x=lifemo, y=rankP), se = FALSE, col= "#990033", formula = "y~x")+
+  theme(legend.title = element_blank())+
+  theme_bw();
+
+p7 <- ggplot(newdata1, aes(x=log(dailyvol), y=Hacked_Num)) + 
+  geom_point(color="#69b3a2") +labs(x="Log of Avg. Daily Volume\n(c)",y="Hacked (Categorical)")+
+  geom_smooth(method = "glm",aes(x=log(dailyvol), y=rankP), method.args= list(family="binomial"),se=F, col= "#990033")+
+  theme(legend.title = element_blank())+
+  theme_bw();
+
+p8 <- ggplot(newdata1, aes(x=lifemo, y=Hacked_Num)) + 
+  geom_point(color="#69b3a2") +labs(x="Lifetime (in Months)\n(d)",y="Hacked (Categorical)")+
+  geom_smooth(method = "glm",aes(x=lifemo, y=rankP),method.args= list(family="binomial"), se=F, col= "#990033")+  
+  theme(legend.title = element_blank())+
+  theme_bw();
+ggarrange(p5, p6,p7,p8,
+          # labels = c("a", "b", "c", "d"),
+          ncol = 2, nrow = 2)
+```
+
+
+## Comment on the graphs from both images
+
+
+# Python companion
+
+For a binary outcome, logistic regression models the conditional probability directly. Comparing it with an OLS fit highlights why classification tasks need probability-aware evaluation.
+
+```python
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+from sklearn.metrics import confusion_matrix, roc_auc_score
+from sklearn.model_selection import train_test_split
+
+df = pd.read_csv("data/aml_exchange_failure.csv")
+df["hacked_binary"] = df["Hacked"].astype(int)
+df["log_dailyvol"] = np.log(df["dailyvol"])
+model_data = df.dropna(subset=["hacked_binary", "log_dailyvol", "lifemo"])
+
+train, test = train_test_split(model_data, test_size=0.30, random_state=571)
+ols = smf.ols("hacked_binary ~ log_dailyvol + lifemo", data=train).fit()
+logit = smf.logit("hacked_binary ~ log_dailyvol + lifemo", data=train).fit()
+print(ols.summary())
+print(logit.summary())
+
+prob = logit.predict(test)
+pred = (prob >= 0.50).astype(int)
+print(confusion_matrix(test["hacked_binary"], pred))
+print("AUC:", roc_auc_score(test["hacked_binary"], prob))
+```
+

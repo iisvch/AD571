@@ -1,0 +1,196 @@
+---
+title: "Logistic Regression and ROC Analysis"
+---
+
+Logistic regression is the core statistical learning model for binary
+outcomes. It estimates probabilities, supports interpretable
+coefficients, and introduces the evaluation tools used throughout
+classification.
+
+## Learning Objectives
+
+- Fit a logistic regression model.
+- Interpret log odds, odds ratios, and fitted probabilities.
+- Use bins to inspect monotone risk patterns.
+- Compare thresholds with sensitivity and specificity.
+- Use ROC curves and AUC to evaluate ranking performance.
+
+## The Logistic Model
+
+For a binary outcome,
+
+$$
+p(x) = \Pr(Y=1 \mid X=x).
+$$
+
+Logistic regression models the log odds:
+
+$$
+\log\left(\frac{p(x)}{1-p(x)}\right)
+= \beta_0 + x^\top\beta.
+$$
+
+The inverse-logit transformation returns the probability:
+
+$$
+p(x) =
+\frac{\exp(\beta_0+x^\top\beta)}
+{1+\exp(\beta_0+x^\top\beta)}.
+$$
+
+## Credit Risk Example
+
+Credit-risk modeling makes three ideas visible: rare events,
+probability estimation, and threshold choice.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+n <- 1000
+credit <- data.frame(
+  balance = rgamma(n, shape = 4, scale = 350),
+  income = rnorm(n, mean = 60000, sd = 18000),
+  age = round(rnorm(n, mean = 45, sd = 12))
+)
+eta <- -6 + 0.0032 * credit$balance -
+  0.000012 * credit$income - 0.015 * credit$age
+credit$default <- rbinom(n, 1, plogis(eta))
+
+logit_fit <- glm(default ~ balance + income + age,
+                 data = credit,
+                 family = binomial)
+credit$prob_default <- predict(logit_fit, type = "response")
+summary(logit_fit)
+exp(coef(logit_fit))
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+
+rng = np.random.default_rng(571)
+n = 1000
+credit = pd.DataFrame({
+    "balance": rng.gamma(shape=4, scale=350, size=n),
+    "income": rng.normal(60000, 18000, n),
+    "age": np.round(rng.normal(45, 12, n))
+})
+eta = -6 + 0.0032 * credit["balance"] - 0.000012 * credit["income"] - 0.015 * credit["age"]
+credit["default"] = rng.binomial(1, 1 / (1 + np.exp(-eta)))
+
+logit_fit = smf.logit("default ~ balance + income + age", data=credit).fit()
+credit["prob_default"] = logit_fit.predict(credit)
+print(logit_fit.summary())
+print(np.exp(logit_fit.params))
+```
+
+:::
+
+An odds ratio above 1 increases odds of default; an odds ratio below 1
+decreases odds, holding other predictors fixed. Probability changes
+are not constant because the logit curve is nonlinear.
+
+## Binning and Default Rates
+
+Binning a continuous predictor can reveal whether observed risk changes
+monotonically with the predictor.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+credit$balance_bin <- cut(credit$balance,
+                          breaks = quantile(credit$balance, probs = seq(0, 1, 0.1)),
+                          include.lowest = TRUE)
+aggregate(default ~ balance_bin, data = credit, mean)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+credit["balance_bin"] = pd.qcut(credit["balance"], q=10, duplicates="drop")
+print(credit.groupby("balance_bin")["default"].mean())
+```
+
+:::
+
+Binning is not a replacement for modeling, but it is a useful
+diagnostic for risk monotonicity and communication.
+
+## ROC and AUC
+
+An ROC curve plots sensitivity against the false positive rate across
+all possible thresholds. AUC summarizes how well the model ranks
+positive cases above negative cases.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+thresholds <- seq(0, 1, length.out = 101)
+roc_points <- do.call(rbind, lapply(thresholds, function(cutoff) {
+  pred <- ifelse(credit$prob_default >= cutoff, 1, 0)
+  tp <- sum(pred == 1 & credit$default == 1)
+  fp <- sum(pred == 1 & credit$default == 0)
+  tn <- sum(pred == 0 & credit$default == 0)
+  fn <- sum(pred == 0 & credit$default == 1)
+  data.frame(
+    threshold = cutoff,
+    sensitivity = tp / (tp + fn),
+    false_positive_rate = fp / (fp + tn)
+  )
+}))
+head(roc_points)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+thresholds = np.linspace(0, 1, 101)
+records = []
+for cutoff in thresholds:
+    pred = (credit["prob_default"] >= cutoff).astype(int)
+    tp = ((pred == 1) & (credit["default"] == 1)).sum()
+    fp = ((pred == 1) & (credit["default"] == 0)).sum()
+    tn = ((pred == 0) & (credit["default"] == 0)).sum()
+    fn = ((pred == 0) & (credit["default"] == 1)).sum()
+    records.append({
+        "threshold": cutoff,
+        "sensitivity": tp / (tp + fn),
+        "false_positive_rate": fp / (fp + tn)
+    })
+roc_points = pd.DataFrame(records)
+print(roc_points.head())
+```
+
+:::
+
+ROC curves describe ranking performance, not calibration. A model can
+rank cases well while producing probabilities that are too high or too
+low.

@@ -1,0 +1,230 @@
+---
+title: "Dimension Reduction"
+---
+
+Dimension reduction replaces many correlated variables with a smaller
+set of constructed features. The goal may be visualization,
+compression, noise reduction, or prediction when the original predictor
+space is too large or too collinear for stable ordinary regression.
+
+## Learning Objectives
+
+- Explain principal components as directions of maximal variance.
+- Distinguish PCA, principal components regression, and partial least
+  squares.
+- Explain why centering and scaling change principal components.
+- Use cross-validation to choose the number of components.
+- Interpret component loadings and prediction results together.
+
+## Principal Components
+
+Let $X$ be a centered and scaled predictor matrix. Principal component
+analysis finds loading vectors $v_1, v_2,\ldots$ so that
+
+$$
+z_1 = Xv_1
+$$
+
+has the largest possible variance subject to $\|v_1\|=1$. The second
+component maximizes variance subject to being orthogonal to the first,
+and so on. The score vectors $z_1,z_2,\ldots$ are new predictors:
+uncorrelated linear combinations of the original variables.
+
+PCA is unsupervised. It uses only $X$, not the response $Y$.
+
+## Scaling Is a Modeling Choice
+
+PCA is sensitive to measurement units. If one predictor has values in
+thousands and another has values in fractions, the first can dominate
+the components even if it is not more important. Centering removes
+location differences; scaling puts variables on comparable units.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+college <- ISLR::College
+x <- model.matrix(Apps ~ ., college)[, -1]
+
+pca_unscaled <- prcomp(x, center = TRUE, scale. = FALSE)
+pca_scaled <- prcomp(x, center = TRUE, scale. = TRUE)
+
+summary(pca_scaled)
+biplot(pca_scaled, scale = 0)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+
+x = pd.get_dummies(college.drop(columns=["Apps"]), drop_first=True)
+
+pca_unscaled = PCA().fit(x)
+x_scaled = StandardScaler().fit_transform(x)
+pca_scaled = PCA().fit(x_scaled)
+
+print(pca_scaled.explained_variance_ratio_[:5])
+```
+
+:::
+
+An incorrect workflow scales the full data set before splitting, which
+leaks information. A correct workflow estimates centering, scaling, and
+components from the training data, then applies the learned rotation to
+held-out data.
+
+## Principal Components Regression
+
+Principal components regression first constructs components from the
+predictors, then regresses the outcome on the first $M$ components.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(pls)
+
+set.seed(571)
+pcr_fit <- pcr(
+  Apps ~ .,
+  data = college,
+  scale = TRUE,
+  validation = "CV"
+)
+
+validationplot(pcr_fit, val.type = "MSEP")
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import cross_val_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+component_grid = range(1, 11)
+pcr_scores = []
+
+for n_components in component_grid:
+    pcr = make_pipeline(
+        StandardScaler(),
+        PCA(n_components=n_components),
+        LinearRegression()
+    )
+    mse = -cross_val_score(
+        pcr, x, college["Apps"],
+        scoring="neg_mean_squared_error",
+        cv=10
+    ).mean()
+    pcr_scores.append(mse)
+
+print(list(zip(component_grid, pcr_scores)))
+```
+
+:::
+
+Keeping too few components can miss predictive signal. Keeping too many
+components can reintroduce noise. Cross-validation provides an empirical
+way to choose $M$.
+
+## Partial Least Squares
+
+Partial least squares also constructs components, but it uses the
+response while constructing them. This can help when directions with
+large predictor variance are not the directions most related to the
+outcome.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+pls_fit <- plsr(
+  Apps ~ .,
+  data = college,
+  scale = TRUE,
+  validation = "CV"
+)
+
+validationplot(pls_fit, val.type = "MSEP")
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.model_selection import cross_val_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+pls_scores = []
+
+for n_components in component_grid:
+    pls = make_pipeline(
+        StandardScaler(),
+        PLSRegression(n_components=n_components)
+    )
+    mse = -cross_val_score(
+        pls, x, college["Apps"],
+        scoring="neg_mean_squared_error",
+        cv=10
+    ).mean()
+    pls_scores.append(mse)
+
+print(list(zip(component_grid, pls_scores)))
+```
+
+:::
+
+| Method | Uses $Y$ to construct components? | Main purpose |
+|---|---:|---|
+| PCA | No | Exploration and compression |
+| PCR | No, then regression | Prediction with correlated predictors |
+| PLS | Yes | Prediction when response-related directions matter |
+
+## Near-Infrared Spectra Example
+
+High-dimensional spectra data illustrate why dimension reduction is
+useful. Each observation can contain hundreds of wavelength
+measurements, with neighboring wavelengths strongly correlated. A small
+number of components can summarize broad spectral patterns while
+reducing noise.
+
+The analysis sequence is:
+
+1. center and scale spectral predictors inside the training data,
+2. visualize the first two component scores,
+3. inspect loadings to see which wavelengths define each component,
+4. fit PCR and PLS models,
+5. choose the number of components by cross-validation,
+6. evaluate the selected model on held-out observations.
+
+This example also shows that interpretability changes. Instead of
+interpreting one coefficient per wavelength, students interpret
+component loadings and prediction performance together.

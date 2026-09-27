@@ -1,0 +1,114 @@
+---
+title: "Splines and Generalized Additive Models"
+---
+
+Splines and generalized additive models provide flexible nonlinear
+regression without forcing one global polynomial to describe the entire
+relationship. They are especially useful when the fitted curve should
+be smooth but locally adaptive.
+
+## Learning Objectives
+
+- Explain knots, basis functions, and degrees of freedom.
+- Fit regression splines and natural splines.
+- Describe generalized additive models.
+- Use validation to choose smoothness.
+- Interpret fitted smooth terms with prediction plots.
+
+## Regression Splines
+
+A regression spline fits piecewise polynomials that join at knots. The
+number and placement of knots control flexibility.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(splines)
+
+set.seed(571)
+n <- 250
+spline_data <- data.frame(age = runif(n, 18, 70))
+spline_data$wage <- 20 + 1.8 * spline_data$age -
+  0.02 * spline_data$age^2 + sin(spline_data$age / 5) * 4 +
+  rnorm(n, sd = 7)
+
+spline_fit <- lm(wage ~ bs(age, df = 6), data = spline_data)
+natural_fit <- lm(wage ~ ns(age, df = 5), data = spline_data)
+summary(spline_fit)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+
+rng = np.random.default_rng(571)
+n = 250
+spline_data = pd.DataFrame({"age": rng.uniform(18, 70, n)})
+spline_data["wage"] = (
+    20 + 1.8 * spline_data["age"] -
+    0.02 * spline_data["age"] ** 2 +
+    np.sin(spline_data["age"] / 5) * 4 +
+    rng.normal(0, 7, n)
+)
+
+spline_fit = smf.ols("wage ~ bs(age, df=6)", data=spline_data).fit()
+natural_fit = smf.ols("wage ~ cr(age, df=5)", data=spline_data).fit()
+print(spline_fit.summary())
+```
+
+:::
+
+Natural splines add boundary constraints, which often stabilize fitted
+curves near the smallest and largest observed values.
+
+## Generalized Additive Models
+
+A generalized additive model has the form
+
+$$
+g\{\operatorname{E}(Y \mid X)\}
+= \beta_0 + f_1(X_1) + f_2(X_2) + \cdots + f_p(X_p).
+$$
+
+The model is additive across predictors but nonlinear within each
+predictor.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(gam)
+
+gam_fit <- gam(wage ~ s(age, df = 5), data = spline_data)
+summary(gam_fit)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+gam_like_fit = smf.ols("wage ~ bs(age, df=5)", data=spline_data).fit()
+print(gam_like_fit.summary())
+```
+
+:::
+
+The fitted smooth term should be interpreted with predicted values and
+uncertainty, not as a single slope.

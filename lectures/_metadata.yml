@@ -1,0 +1,19 @@
+author: "Nakul R. Padalkar"
+date-modified: today
+date-format: long
+format:
+  html:
+    code-overflow: wrap
+    number-sections: true
+    number-depth: 3
+    toc: true
+    toc-depth: 3
+    html-math-method:
+      method: katex
+      number-equations: true
+      add-to-equation: section
+bibliography: ../references.bib
+execute:
+  warning: false
+  message: false
+

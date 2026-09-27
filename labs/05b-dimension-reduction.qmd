@@ -1,0 +1,336 @@
+---
+title: "Lab 05b: Dimension Reduction"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+ Support Packages
+
+
+```{r support, warning=FALSE,message=FALSE,include=TRUE}
+require(MASS)
+require(glmnet)
+library(kableExtra)
+library(stargazer)
+library(flextable)
+library(dplyr)
+library(leaps)
+library(caret)
+library(ggplot2)
+library(ggExtra)
+library(tidyr)
+library(ISLR2)
+library(ISLR)
+library(readr)
+library(reticulate)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("weights", "interactions", "cjoint", "plm", "interactions", "jtools", "stats", "miceadds", "broom", "RColorBrewer", "ggstatsplot", "ggpubr", "stargazer", "sandwich", "hrbrthemes", "rms", "interplot", "coefplot", "gmodels", "car", "lattice","foreign", "ggplot2", "MASS", "Hmisc", "reshape2", "oddsratio", "tidyr", "psych", "dplyr", "tidyverse", "cjoint")
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+th <- ggplot2::theme(
+  plot.title = element_text(color="#003366", size=12, face="bold"),
+  axis.title.x = element_text(color="black", size=11, face="bold"),
+  axis.title.y = element_text(color="black", size=11, face="bold"),
+  panel.background = element_rect(fill = "white",
+                                  colour = "white",
+                                  size = 0.5, linetype = 2),
+  panel.grid.major = element_line(size = 0.5, linetype = 2,
+                                  colour = "gray80"), 
+  panel.grid.minor = element_line(size = 0.25, linetype =2,
+                                  colour = "gray80"),
+  axis.line = element_line(size = 0.53, colour = "black"),
+  panel.border = element_rect(linetype = 1, fill = NA,size=0.53),
+  axis.text = element_text(colour = "black",face="bold",size=10))
+```
+
+# Functions used for plots
+
+```{r setup, include=TRUE, fig.align='center', message=FALSE,warning=FALSE, fig.height=10, fig.width=8}
+# knitr::opts_chunk$set(fig.width=7, fig.height=4.5,
+#                       echo=TRUE, warning=FALSE, message=FALSE)
+
+library('ggplot2')
+library('tidyr')
+library('WVPlots') # devtools::install_github('WinVector/WVPlots',build_vignettes=TRUE)
+
+barbell_plot = function(frame, xvar, ymin, ymax, colorvar=NULL) {
+  if(is.null(colorvar)) {
+    gplot = ggplot(frame, aes_string(x=xvar))
+  } else {
+    gplot = ggplot(frame, aes_string(x=xvar, color=colorvar))
+  }
+  
+  gplot + geom_point(aes_string(y=ymin)) + 
+    geom_point(aes_string(y=ymax)) +
+    geom_linerange(aes_string(ymin=ymin, ymax=ymax)) +
+    ylab("value")
+}
+
+dotplot_identity = function(frame, xvar, yvar, colorvar=NULL) {
+  if(is.null(colorvar)) {
+    gplot = ggplot(frame, aes_string(x=xvar, y=yvar, ymax=yvar))
+  } else {
+    gplot = ggplot(frame, 
+                   aes_string(x=xvar, y=yvar, ymax=yvar, 
+                              color=colorvar))
+  }
+  gplot + geom_point() + geom_linerange(aes(ymin=0))
+}
+
+extractProjection <- function(ndim,princ) {
+  # pull off the rotation.  
+  proj <- princ$rotation[,1:ndim] 
+  # sign was arbitrary, so flip in convenient form
+  for(i in seq_len(ndim)) {
+    si <- sign(mean(proj[,i]))
+    if(si!=0) {
+      proj[,i] <- proj[,i]*si
+    }
+  }
+  proj
+}
+
+rsq <- function(x,y) {
+  1 - sum((y-x)^2)/sum((y-mean(y))^2)
+}
+```
+
+
+# Classification of Near-Infrared spectra using Principal Component Analysis
+
+Principal Component Regression (PCR, in brief)  is the natural extension of Principal Components Analysis (PCA) when it comes to regression problems. We discussed PCA in the PCR example in class (see Sec 4 video from the 17th Feb) posts. PCA is also great for clustering and classification of [NIR](https://en.wikipedia.org/wiki/Near-infrared_spectroscopy) or other spectroscopic data. For the sake of this lab we will focus on PCR and Partial Least Square. **This lab only requires you to do Principal Component Regression**.
+
+For this we are using a real-world dataset used by [NIRPY Research](https://github.com/nevernervous78/nirpyresearch). This dataset contains **Sugar content in peaches (Brix)** and **Spectra Values**. The size of the dataset is $600\times 50$, so the $p>>n$. This is an ideal dataset to show both PCR and PLS. [Brix](https://en.wikipedia.org/wiki/Brix), or more precisely degree Brix ($^{\circ}$Bx), is the measure of the sugar content in a solution. For fresh fruit Brix gives a measure of the sugars in it, which is an important parameter to establish the eating quality of the fruit, and therefore its market value.
+
+PCA is nearly invariably used in the analysis of NIR data, and for a very good reason. Typical NIR spectra are acquired at many wavelengths (light spectrum, think VIBGYOR of rainbow). We use a spectrometer to typically acquire **n** wavelength points (in this case, 601) with an interval of 2 nano-meter (I have used it at an interval of 1, 2, 3, 5, and 10 nm).
+
+In general spectral data is very useless, why because it smooths out the features of the data. What does this mean? See the image below on the left we have an original image of a person's face, on the right we have same image blurred using Gaussian noise. The left most image gives **sharp** features like, *individual facial hairs*, *eyes outline*, or *nose outline*. The same features are now **smoothed out** in the right most image. When we extract the features out of the left most image we will get a **highly correlated joint feature set**. Why joint? Each image is an array of $n\times m\times 3$ pixels resulting from three channels, Red, Green, Blue and the x & y coordinates representing each pixel's value. This is very true for NIR spectra. For this reason, most of the features of NIR spectra at different wavelengths are highly correlated.
+
+<p align = "center">
+<img src = "original-and-blurred-face-images.png" alt="Original and Blurred Faces" width="800">
+</p>
+
+
+That is where PCA comes into play. PCA is very efficient at performing dimensionality reduction in multidimensional data which display a high level of correlation. PCA will get rid of correlated components in the data by projecting the multidimensional data set (601 dimensions for the spectrometer) to a much lower dimensionality space, often a few, or even just two, dimensions.
+
+These basic operations on the data are typically done using **chemometric** software, and there are many excellent choices on the market. If however you would like to have some additional flexibility, for instance try out a few supervised or unsupervised learning techniques of your data, you might want to code the data analysis from scratch.
+
+# The Data
+
+Let’s go back to our basic explanation of PCA and PCR using a specific example. We want to build a calibration for Brix using NIR spectra from 50 fresh peaches. As mentioned before, each spectrum is composed of 601 data points. To build the calibration we are going to correlate somehow the spectrum of each peach with its value of Brix measured independently with another method. As you can see already, we are going to reduce 601 data points to a single parameter! That means in practice one never needs this many points. Just a few would be sufficient.
+
+But which variables are the one that are significant to describe Brix variation? Well, we don’t know that in advance, and that is why we are going to use PCA to sort things out. PCA is going to reduce the dimensionality of our data space, getting rid of all the variables (data points) that are highly correlated with one another. In practice we will reduce 601 dimensions (the measured wavelengths) to a much lower number, often a few, or even just two, dimensions.
+
+With PCA we can establish that different pieces of fruit may have different Brix values, but we won’t be able to build a model that is able to predict Brix values from future measurements. The reason is that PCA makes no use whatsoever of the additional information we may have, namely the independent data of Brix measured with a different instrument. In order to use the additional information we need to go from a classification problem to a regression problem. Enters PCR.
+
+
+# Performing PCA
+
+To put is very simply, PCR is a two-step process:
+
+- Run PCA on our data to decompose the independent variables into the ‘principal components’, corresponding to removing correlated components
+- Select a subset of the principal components and run a regression against the calibration values
+
+As easy as eating a peach pie.
+
+Well, yes, but a word of warning is called for. In the apparent simplicity of PCR lies also its main limitation. Using PCA to extract the principal components in step 1 is done disregarding whichever information we may have on the calibration values. PCA is a ‘plug&play’ technique. It spits out some results regardless of the nature of the input data, or its underlying statistics. In other words, PCA is very simple, but sometimes may be wrong. Read [this](https://arxiv.org/pdf/1404.1100.pdf) paper by **Jonathon Shlens** on PCA for more information.
+
+These limitations are inherited by PCR, in the sense that the principal components found by PCA may not be the optimal ones for the regression we want to run. This problem is alleviated by Partial Least Square Regression (PLS) which we will discuss in the future note (and in this lab as well). For the moment, let’s leverage the simplicity of PCR to understand the basics of the regression problem, and hopefully enjoy building the same simple calibration model of our own in Python.
+
+# The Analysis
+
+```{r dataimport, fig.align='center',fig.width=8, fig.height=4.5,fig.cap="Spectral Absorption for each Wavelength"}
+peach <- read.csv("peach_spectra_brix.csv", header = 1)
+kable(head(peach[1:5,1:15]),digits=2) %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+
+```{r dataplt, fig.align='center',fig.width=8, fig.height=4.5,fig.cap="Spectral Absorption for each Wavelength"}
+library(reshape2)
+wavelength <- seq(from=1102,to=2300,by=2)
+plot_data <- melt(t(peach[,2:601]),id.var="id")
+plot_data$wavelength <- rep(wavelength, 50)
+ggplot(plot_data, aes(x=wavelength, y=value, group=Var2, colour=Var2)) +
+  geom_line() + labs(title = "Spectral Absorption for each Wavelength")+
+  xlab("Wavelength")+ ylab("Absorption")+guides(color=guide_legend("Spectrum"))+
+  scale_colour_gradient(low = "blue", high = "red")+th
+
+# p1 <- ggplot(peach, aes(wavelength, t(peach[,2:601]), col = group)) +             # Create ggplot2 plot
+#   geom_line()+th;p1
+```
+
+
+These are the absorbance spectra of our 50 samples. We divide the PCR problem in two steps. The first is to run PCA on the input data. Before that, we have two preprocessing steps. The first is to take the first derivative of the absorbance data (**only needed for this type of dataset**). The second is a staple of PCA: standardize the features to subtract the mean and reduce to unit variance.
+
+```{r firstder,message=FALSE,warning=FALSE}
+library(pracma)
+peachX <- data.matrix(peach[,2:601], rownames.force = NA)
+
+d1X <- savgol(peachX, fl=25, forder = 5, dorder=1)
+D1X <- matrix(d1X, nrow = 50, byrow = TRUE)
+princPeach <- prcomp(D1X,center = TRUE,scale. = TRUE)
+pcPeach_sum <- summary(princPeach)
+```
+
+
+```{r pcload, fig.align='center',fig.width=8, fig.height=4.5,fig.cap="First Five Principal Componants"}
+# extract the principal components
+rot5peach <- extractProjection(5,princPeach)
+
+# prepare the data to plot the variable loadings
+rotfpeach = as.data.frame(rot5peach)
+rotfpeach$varName = rownames(rotfpeach)
+rotflongpeach = gather(rotfpeach, "PC", "loading",
+                       dplyr::starts_with("PC"))
+rotflongpeach$vartype = ifelse(grepl("noise", 
+                                     rotflongpeach$varName),
+                               "noise", "signal")
+
+# plot the singular values
+dotplot_identity(frame = data.frame(pc=1:5, 
+                            magnitude=princPeach$sdev[1:5]), 
+                 xvar="pc",yvar="magnitude") +
+  ggtitle("Five Principal Componants")+th
+```
+
+<!-- # ```{r scrplt1, fig.align='center',fig.width=8, fig.height=4.5,fig.cap="First Five Principal Componants"} -->
+<!-- # var_explained_df <- data.frame(PC= paste0("PC",1:10), -->
+<!-- #                                var_explained=(princPeach$sdev)^2/sum((princPeach$sdev)^2)) -->
+<!-- # var_explained_df <- var_explained_df[var_explained_df$PC != "PC10", ] -->
+<!-- #  -->
+<!-- # var_explained_df %>% -->
+<!-- #   ggplot(aes(x=PC,y=var_explained, group=1))+ -->
+<!-- #   geom_point(size=4)+ -->
+<!-- #   geom_line()+ -->
+<!-- #   xlab("Explained Variance")+ -->
+<!-- #   labs(title="Scree plot: PCA on scaled data")+th -->
+<!-- # ``` -->
+
+
+```{r scrplt2, fig.align='center',fig.width=8, fig.height=4.5,fig.cap="First Five Principal Componants",message=FALSE,warning=FALSE}
+library(factoextra)
+fviz_eig(princPeach,linecolor = "#AA1111",
+   barcolor = "#336699", barfill = "#336699",width=0.7, addlabels=T)+th
+```
+
+We just need the first three pc components for regression since they explain almost 90% of the variation. In practice we should be only using the first PC Why? **Domain Knowledge**?
+
+
+```{r idealsvld, fig.align='center', fig.height=100, fig.width=9,dpi=200}
+dotplot_identity(rotflongpeach, "varName", "loading", "vartype") + 
+  facet_wrap(~PC,nrow=1) + coord_flip() + 
+  ggtitle("x scaled variable loadings, first 5 principal components") + th
+  # scale_color_manual(values = c("noise" = "#d95f02", "signal" = "#1b9e77"))+th
+```
+
+
+
+
+```{r idealproj, fig.align='center', fig.height=4.75, fig.width=8,message=FALSE,warning=FALSE}
+# signs are arbitrary on PCA, so instead of calling predict we pull out
+# (and alter) the projection by hand
+projectedTrainIdeal <-
+  as.data.frame(peachX %*% extractProjection(2,princPeach),
+                                 stringsAsFactors = FALSE)
+projectedTrainIdeal$y <- peach$Brix
+ScatterHistN(projectedTrainIdeal,'PC1','PC2','y',
+               "Data projected to first two principal components")+th
+```
+
+Let's look at the relationship of each component with the y variable. To do this we will need to extract the five components and run linear regression model. 
+
+```{r noscalemodel,results='asis',message=FALSE,warning=FALSE}
+# get all the principal components
+# not really a projection as we took all components!
+projectedTrain <- as.data.frame(predict(princPeach,peachX),
+                                 stringsAsFactors = FALSE)
+vars = colnames(projectedTrain)
+projectedTrain$y <- peach$Brix
+
+fit_pc0 <- lm(y ~1,data=projectedTrain)
+fit_pc1 <- lm(y ~ PC1,data=projectedTrain)
+fit_pc2 <- lm(y ~ PC1+PC2,data=projectedTrain)
+fit_pc3 <- lm(y ~ PC1+PC2+PC3,data=projectedTrain)
+fit_pc4 <- lm(y ~ PC1+PC2+PC3+PC4,data=projectedTrain)
+fit_pc5 <- lm(y ~ PC1+PC2+PC3+PC4+PC5,data=projectedTrain)
+estimate <- predict(fit_pc1,newdata=projectedTrain)
+trainrsq <- rsq(estimate,projectedTrain$y)
+stargazer::stargazer(fit_pc1,fit_pc2,fit_pc3,fit_pc4,fit_pc5, type='html', summary=TRUE,report = "vc*stp",ci=TRUE)
+```
+
+Let's see what happens with anova. Looking at the table below we can say that there are no differences in the models. <span style="color:red">This is absolutely nuts, We should not be using ANOVA for PCA</span>. Then what should we use?  We should use **ANOVA–simultaneous component analysis**, this is unfortunately as much as I know.
+
+
+```{r modanova,message=FALSE,warning=FALSE}
+pc_anov <- anova(fit_pc0,fit_pc1,fit_pc2,fit_pc3,fit_pc4,fit_pc5)
+kable(pc_anov,digits=3)%>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+# Partial Least Squares Model
+
+
+<!-- ```{r} -->
+<!-- peachPC <-  -->
+<!-- pcfit <- glm(,data=projectedTrain) -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- pca.loadings <- princPeach$rotation -->
+<!-- ind.sup.coord <- t(apply(ind.scaled, 1, coord_func, pca.loadings )) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- train_test <- sample(c(rep(0, 0.7 * nrow(peach)), rep(1, 0.3 * nrow(peach)))) -->
+<!-- train <- peach[train_test == 0, ]             -->
+<!-- test <- peach[train_test == 1, ]             -->
+
+
+<!-- ``` -->
+
+
+# Python companion
+
+Principal components regression first rotates the predictors into orthogonal directions, then fits a regression model using a selected number of components.
+
+```python
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import cross_val_score, KFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+df = pd.read_csv("data/lab05_dimension_reduction.csv")
+X = df.drop(columns="y")
+y = df["y"]
+
+cv = KFold(n_splits=10, shuffle=True, random_state=571)
+rows = []
+for n_components in range(1, min(X.shape[1], 15) + 1):
+    model = Pipeline([
+        ("scale", StandardScaler()),
+        ("pca", PCA(n_components=n_components)),
+        ("regression", LinearRegression()),
+    ])
+    rmse = -cross_val_score(model, X, y, cv=cv, scoring="neg_root_mean_squared_error")
+    rows.append({"components": n_components, "cv_rmse": rmse.mean()})
+
+print(pd.DataFrame(rows).sort_values("cv_rmse").head())
+```
+

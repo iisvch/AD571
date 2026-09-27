@@ -1,0 +1,270 @@
+---
+title: "Bias, Variance, and Nonlinear Models"
+---
+
+This chapter connects model flexibility to prediction error and then
+uses nonlinear regression tools to show how simple models can learn
+curved relationships without abandoning statistical interpretation.
+
+## Learning Objectives
+
+- Explain reducible error, irreducible error, bias, and variance.
+- Identify underfitting and overfitting from train/test patterns.
+- Fit polynomial regression, step functions, splines, local regression,
+  and generalized additive models.
+- Use validation or cross-validation to choose flexibility.
+- Explain nonlinear fitted relationships with plots and predicted
+  values.
+
+## Bias-Variance Decomposition
+
+At a new point $x_0$, expected prediction error can be decomposed as
+
+$$
+\operatorname{E}\{(Y - \hat f(x_0))^2\}
+= \operatorname{Var}(\epsilon)
++ \operatorname{Bias}(\hat f(x_0))^2
++ \operatorname{Var}(\hat f(x_0)).
+$$
+
+The irreducible error $\operatorname{Var}(\epsilon)$ remains even if
+the true regression function is known. Bias is error from using a model
+that is too rigid. Variance is error from using a model that changes
+too much across training samples.
+
+Increasing flexibility usually lowers bias and raises variance. The
+best predictive model is the one that balances these forces for the
+available sample size and signal strength.
+
+## Simulation View
+
+A simulation makes the tradeoff visible because the true function can
+be known:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+x <- runif(200, -3, 3)
+y <- sin(x) + 0.4 * x^2 + rnorm(200, sd = 0.4)
+
+fit_linear <- lm(y ~ x)
+fit_poly5 <- lm(y ~ poly(x, 5))
+fit_poly15 <- lm(y ~ poly(x, 15))
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+
+rng = np.random.default_rng(571)
+x = rng.uniform(-3, 3, 200)
+y = np.sin(x) + 0.4 * x**2 + rng.normal(0, 0.4, 200)
+X = x.reshape(-1, 1)
+
+fit_linear = LinearRegression().fit(X, y)
+fit_poly5 = make_pipeline(PolynomialFeatures(5), LinearRegression()).fit(X, y)
+fit_poly15 = make_pipeline(PolynomialFeatures(15), LinearRegression()).fit(X, y)
+```
+
+:::
+
+The linear model has high bias if the true function is curved. The
+degree-15 polynomial may have high variance if it follows accidental
+noise. Validation error, not visual smoothness alone, should guide the
+choice.
+
+## Polynomial Regression
+
+Polynomial regression remains linear in the coefficients while allowing
+a curved mean function:
+
+$$
+\operatorname{E}(Y \mid X=x)
+= \beta_0 + \beta_1x + \beta_2x^2 + \cdots + \beta_dx^d.
+$$
+
+In R, orthogonal polynomial terms reduce numerical collinearity:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(ISLR)
+
+wage <- ISLR::Wage
+poly_fit <- lm(wage ~ poly(age, 4), data = wage)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+
+X_age = wage[["age"]]
+y_wage = wage["wage"]
+
+poly_fit = make_pipeline(
+    PolynomialFeatures(degree=4, include_bias=False),
+    LinearRegression()
+).fit(X_age, y_wage)
+```
+
+:::
+
+The degree controls flexibility. Prediction plots are usually clearer
+than raw coefficient interpretation for high-degree polynomials.
+
+## Step Functions and Splines
+
+A step function divides a predictor into intervals and fits a constant
+mean within each interval:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+step_fit <- lm(wage ~ cut(age, 4), data = wage)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import pandas as pd
+import statsmodels.formula.api as smf
+
+wage_step = wage.copy()
+wage_step["age_bin"] = pd.cut(wage_step["age"], bins=4)
+step_fit = smf.ols("wage ~ C(age_bin)", data=wage_step).fit()
+print(step_fit.summary())
+```
+
+:::
+
+Regression splines fit smooth piecewise polynomials. Knots define where
+the pieces meet, and degrees of freedom control smoothness:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(splines)
+
+spline_fit <- lm(wage ~ bs(age, df = 6), data = wage)
+natural_fit <- lm(wage ~ ns(age, df = 5), data = wage)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import statsmodels.formula.api as smf
+
+spline_fit = smf.ols(
+    "wage ~ bs(age, df=6)",
+    data=wage
+).fit()
+natural_fit = smf.ols(
+    "wage ~ cr(age, df=5)",
+    data=wage
+).fit()
+```
+
+:::
+
+Natural splines add boundary constraints that often produce more stable
+behavior at the edges of the data.
+
+## Generalized Additive Models
+
+Generalized additive models combine several smooth functions:
+
+$$
+g\{\operatorname{E}(Y \mid X)\}
+= \beta_0 + f_1(X_1) + f_2(X_2) + \cdots + f_p(X_p).
+$$
+
+They keep additivity while allowing nonlinear effects:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(gam)
+
+gam_fit <- gam(
+  wage ~ s(age, df = 5) + s(year, df = 4) + education,
+  data = wage
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import statsmodels.formula.api as smf
+
+gam_like_fit = smf.ols(
+    "wage ~ bs(age, df=5) + bs(year, df=4) + C(education)",
+    data=wage
+).fit()
+```
+
+:::
+
+GAM plots show the estimated contribution of each smooth term while
+holding other terms in the model fixed.
+
+## Choosing Flexibility
+
+Training error usually decreases as flexibility increases. Test error
+often decreases at first, then increases when the model starts fitting
+noise. A reliable comparison should use a validation set or
+cross-validation:
+
+1. choose a grid of degrees, knots, or smoothness values,
+2. fit each candidate using the training folds,
+3. compute held-out error,
+4. choose a flexible model only if it earns better generalization,
+5. explain the fitted shape with prediction plots.

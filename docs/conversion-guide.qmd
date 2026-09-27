@@ -1,0 +1,85 @@
+---
+title: "Conversion Guide"
+---
+
+This guide defines the repeatable workflow for converting older source
+material into the Quarto site.
+
+## Rmd to Qmd
+
+1. Copy the source `.Rmd` into a temporary working branch or scratch
+   folder.
+2. Preserve code chunks, equations, and figures, but rewrite the prose
+   into the lecture page pattern.
+3. Replace institution-specific labels, term dates, and assignment
+   references with neutral wording.
+4. Move long code demonstrations into lab pages when they interrupt the
+   lecture narrative.
+5. Render the page and fix warnings before linking it from the roadmap.
+
+## LaTeX Slides to Notes
+
+Slide decks are useful for topic order, figures, and concise examples,
+but the website should read like teaching notes. Convert slides into
+sections rather than embedding slide-by-slide prose.
+
+For each deck:
+
+- extract section titles,
+- identify equations and figures worth keeping,
+- rewrite bullets as paragraphs,
+- cite or recreate figures only when permissions are clear,
+- place slide-specific details in maintainer notes.
+
+## PDF References
+
+External PDFs should be treated as references unless licensing allows
+redistribution. Use them to improve explanations and reading lists, not
+as copied course content.
+
+## Suggested Page Template
+
+```markdown
+---
+title: "NN: Lecture Title"
+---
+
+Opening paragraph.
+
+## Learning Objectives
+
+- Objective 1.
+- Objective 2.
+
+## Core Ideas
+
+Concepts, notation, and equations.
+
+## Worked Example
+
+Data, model, result, interpretation.
+
+## Lab Hook
+
+How the lab reinforces the lecture.
+
+## Source Notes
+
+Maintainer-only local paths and provenance.
+
+## Build Status
+
+What remains before this page is student-ready.
+```
+
+## Render Check
+
+Run:
+
+```powershell
+quarto render
+```
+
+The build should pass before new pages are treated as part of the
+published lecture set.
+

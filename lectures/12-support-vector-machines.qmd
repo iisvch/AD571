@@ -1,0 +1,173 @@
+---
+title: "Support Vector Machines"
+---
+
+Support vector machines use margins and kernels to construct
+classifiers that can be linear in a transformed feature space while
+nonlinear in the original variables.
+
+## Learning Objectives
+
+- Explain maximal-margin and soft-margin classification.
+- Interpret support vectors and the cost parameter.
+- Compare linear, polynomial, and radial kernels.
+- Explain why scaling is essential for SVMs.
+- Tune cost and kernel parameters with cross-validation.
+
+## Separating Hyperplanes
+
+For classes coded as $y_i \in \{-1,1\}$, a separating hyperplane has
+the form
+
+$$
+f(x) = \beta_0 + x^\top\beta.
+$$
+
+The predicted class is the sign of $f(x)$. If the classes are perfectly
+separable, many hyperplanes may classify the training data correctly.
+The maximal-margin classifier chooses the hyperplane with the largest
+distance to the closest training points.
+
+Those closest points are the support vectors. They determine the
+boundary; observations far from the boundary do not directly control
+the fit.
+
+## Soft Margins
+
+Perfect separation is rare and can lead to overly sensitive boundaries.
+The soft-margin classifier allows violations:
+
+$$
+y_i(\beta_0 + x_i^\top\beta) \geq 1 - \xi_i,
+\qquad \xi_i \geq 0.
+$$
+
+The cost parameter controls the penalty for violations. A large cost
+allows fewer violations and may produce a narrower margin. A small cost
+allows more violations and may produce a wider, more stable margin.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(e1071)
+
+linear_svm <- svm(
+  class ~ .,
+  data = train,
+  kernel = "linear",
+  cost = 1,
+  scale = TRUE
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+
+linear_svm = make_pipeline(
+    StandardScaler(),
+    SVC(kernel="linear", C=1)
+)
+linear_svm.fit(X_train, y_train)
+```
+
+:::
+
+## Kernels
+
+Kernels compute similarity after an implicit feature transformation.
+This allows nonlinear boundaries without explicitly creating all
+transformed variables.
+
+| Kernel | Form | Boundary behavior |
+|---|---|---|
+| Linear | $x_i^\top x_j$ | Linear in original predictors |
+| Polynomial | $(c + x_i^\top x_j)^d$ | Global curved boundaries |
+| Radial basis | $\exp(-\gamma\|x_i-x_j\|^2)$ | Local flexible boundaries |
+
+The radial kernel is often effective because it can create local
+nonlinear boundaries. Its flexibility depends on $\gamma$: larger
+values create more local influence.
+
+## Iris Decision Surfaces
+
+A two-feature iris classification example makes kernels visible. Fit
+linear, polynomial, and radial SVMs on the same scaled predictors, then
+plot the predicted class across a grid. The linear kernel creates a
+straight boundary in the two-dimensional plot. The polynomial and
+radial kernels can bend around class structure.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+tuned <- tune(
+  svm,
+  class ~ .,
+  data = train,
+  kernel = "radial",
+  ranges = list(cost = c(0.1, 1, 10), gamma = c(0.1, 1, 5))
+)
+
+best_svm <- tuned$best.model
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.model_selection import GridSearchCV
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+
+svm_pipeline = make_pipeline(StandardScaler(), SVC(kernel="rbf"))
+tuned = GridSearchCV(
+    svm_pipeline,
+    param_grid={
+        "svc__C": [0.1, 1, 10],
+        "svc__gamma": [0.1, 1, 5]
+    },
+    cv=5
+)
+tuned.fit(X_train, y_train)
+best_svm = tuned.best_estimator_
+```
+
+:::
+
+This comparison should emphasize that better visual separation on the
+training data is not enough. Kernel choice and tuning parameters must
+be chosen with validation or cross-validation.
+
+## Scaling and Tuning
+
+SVMs depend on distances and inner products, so feature scale matters.
+If one predictor has a much larger numeric range than another, it can
+dominate the margin and kernel values.
+
+The usual tuning sequence is:
+
+1. split the data,
+2. center and scale predictors inside the training data,
+3. choose candidate kernels,
+4. tune cost and kernel-specific parameters by cross-validation,
+5. evaluate the selected model on held-out data,
+6. inspect support vectors and decision surfaces where possible.

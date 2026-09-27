@@ -1,0 +1,251 @@
+---
+title: "Lab 05: Regularization"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+```{r support, warning=FALSE,message=FALSE,include=FALSE}
+require(MASS)
+require(glmnet)
+library(kableExtra)
+library(stargazer)
+library(flextable)
+library(dplyr)
+library(leaps)
+library(caret)
+library(ggplot2)
+library(ggExtra)
+library(tidyr)
+library(ISLR2)
+library(ISLR)
+library(readr)
+library(reticulate)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("weights", "interactions", "cjoint", "plm", "interactions", "jtools", "stats", "miceadds", "broom", "RColorBrewer", "ggstatsplot", "ggpubr", "stargazer", "sandwich", "hrbrthemes", "rms", "interplot", "coefplot", "gmodels", "car", "lattice","foreign", "ggplot2", "MASS", "Hmisc", "reshape2", "oddsratio", "tidyr", "psych", "dplyr", "tidyverse", "cjoint")
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+th <- ggplot2::theme(
+  plot.title = element_text(color="#003366", size=12, face="bold"),
+  axis.title.x = element_text(color="black", size=11, face="bold"),
+  axis.title.y = element_text(color="black", size=11, face="bold"),
+  panel.background = element_rect(fill = "white",
+                                  colour = "white",
+                                  size = 0.5, linetype = 2),
+  panel.grid.major = element_line(size = 0.5, linetype = 2,
+                                  colour = "gray80"), 
+  panel.grid.minor = element_line(size = 0.25, linetype =2,
+                                  colour = "gray80"),
+  axis.line = element_line(size = 0.53, colour = "black"),
+  panel.border = element_rect(linetype = 1, fill = NA,size=0.53),
+  axis.text = element_text(colour = "black",face="bold",size=10))
+```
+
+# In this exercise, we will predict the number of applications received using the other variables in the College data set.
+
+## Split the data set into a training set and a test set.
+
+```{r, warning=FALSE,message=FALSE}
+set.seed(18659)
+# head(College)
+train = sample(length(College[,1]), .7*length(College[,1]))
+```
+
+## Fit a linear model using least squares on the training set, and report the test error obtained.
+![]()
+<img src="images/picture.jpg">	
+
+```{r lm1,results='asis'}
+lm1 = lm(Apps ~ ., data = College[train,])
+apps.pred.lm = predict.lm(lm1, newdata = College[-train,])
+err.lm = sqrt(mean((College$Apps[-train] - apps.pred.lm)^2))
+stargazer::stargazer(lm1, type='html', summary=TRUE,
+                     title = "Full Regression Model for College Applications",
+                     report = "vc*stp",ci=TRUE)
+# summary(lm1)
+```
+
+The RMS error is `round(err.lm,2)`.
+
+## Fit a ridge regression model on the training set, with $\lambda$ chosen by cross-validation. Report the test error obtained.
+
+```{r ridgeplt, fig.height=4, fig.width=6,fig.align='center'}
+X = model.matrix(Apps ~ ., data = College)
+# X[,2:18] = scale(X[,2:18])
+X.train = X[train,]
+X.predict = X[-train,]
+y = College$Apps[train]
+cv.ridge=cv.glmnet(X.train ,y,alpha=0, lambda.min.ratio = 0.000001)
+cv.ridgesumm <- summary(cv.ridge)
+plot(cv.ridge)
+tmp_coeffs <- coef(cv.ridge, s = cv.ridge$lambda[5])
+tmp_coeffs[tmp_coeffs[,1]!=0,]
+data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = tmp_coeffs@x)
+```
+
+
+The plot shows that the cv estimate for the error remains constant for a fairly large $\lambda$ range. Let's use $\lambda = 10$ to fit a model and predict with it. Best lambda is `cv.ridge$lambda.min`.
+
+```{r}
+ridge1 = glmnet(X.train,y,alpha=0)
+apps.pred.ridge = predict.glmnet(ridge1, newx = X.predict, s = 10, type = "response")
+err.ridge = sqrt(mean((College$Apps[-train] - apps.pred.ridge)^2))
+
+```
+
+The RMS error is `round(err.ridge,2)`. 
+
+
+## Fit a lasso model on the training set, with $\lambda$ chosen by cross-validation. Report the test error obtained, along with the number of non-zero coefficient estimates.
+
+```{r lass1, fig.height=4, fig.width=6,fig.align='center',message=FALSE,warning=FALSE}
+lasso1 = cv.glmnet(X.train ,y,alpha=1, lambda.min.ratio = 0.0001)
+plot(lasso1,xvar = "lambda",pch=21,bg="#336699")
+```
+
+
+```{r lass2, fig.height=4, fig.width=6,fig.align='center'}
+lasso2 = glmnet(X.train ,y,alpha=1)
+plot(lasso2, xvar = "lambda", lwd=1.5)
+```
+
+The cv error plot shows that up to $\log \lambda \approx 5$ the error remains fairly constant. The plot also shows that $\lambda_{1se} =$ `round(lasso1$lambda.1se,1)`.  Let us use this $\lambda$ for prediction. The plot shows that there are two non-zero coefficients, namely those of the predictors `rownames(coef(lasso1))[c(4,6)]`.
+
+```{r}
+apps.pred.lasso = predict.glmnet(lasso2, newx = X.predict, s = lasso1$lambda.1se, type = "response")
+err.lasso = sqrt(mean((College$Apps[-train] - apps.pred.lasso)^2))
+``` 
+
+The rms error is `round(err.lasso,2)`.
+
+## Comment on the results obtained. How accurately can we predict the number of college applications received? Is there much difference among the test errors resulting from these three approaches?
+
+# Consider the __Boston__ data. We want to predict __medv__ from all other predictors, using the LASSO.
+
+## Set up the LASSO and plot the trajectories of all coefficients. What are the last five variables to remain in the model? 
+
+```{r boslas, fig.height=4,fig.width=6,fig.align='center'}
+X.Boston <- model.matrix(medv~., data = Boston)
+Boston.lasso <- glmnet(X.Boston , Boston$medv ,alpha=1, standardize = FALSE)
+plot(Boston.lasso, xvar = "lambda", lwd=1.5)
+```
+The plot shows that for $\log \lambda \approx 1.3$ there are five variables left in the model. These are `zn, age, tax, black, lstat`.
+
+```{r}
+Boston.lasso.1 <- glmnet(X.Boston , Boston$medv ,alpha=1, lambda = 4, standardize = FALSE)
+boscoef <- coef(Boston.lasso.1)
+summ <- summary(boscoef)
+Bcoef <- data.frame(Variable     = rownames(boscoef)[summ$i],
+           coefficient  = summ$x)
+Bcoef %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+## Find the 1SE value of $\lambda$, using 10-fold cross-validation. What is the cross validation estimate for the residual standard error? 
+
+
+```{r boslascv, }
+cv.Boston.lasso <- cv.glmnet(X.Boston , Boston$medv ,alpha=1)
+names(cv.Boston.lasso)
+lambda.1se = cv.Boston.lasso$lambda.1se
+i0 <- which(cv.Boston.lasso$lambda == lambda.1se)
+rmse.Boston <- cv.Boston.lasso$cvm[i0]
+cv.Boston.lasso$lambda.min
+```
+
+The computation shows that  $\lambda_{1SE} =$ `round(lambda.1se, 3)`. The cross validation estimate for the residual standard error is `round(sqrt(rmse.Boston), 2)`. The lambda min is `cv.Boston.lasso$lambda.min`.
+
+## Rescale all predictors so that their mean is zero and their standard deviation is 1. Then set up the LASSO  and plot the trajectories of all coefficients. What are the last five variables to remain in the model? Compare  your answer to part a).
+
+We rescale columns 2 - 14 of the model matrix and run the LASSO again.
+
+```{r, fig.height=4,fig.width=6,fig.align='center'}
+set.seed(18659)
+X.Boston.1 <- X.Boston
+
+for (j in 2:13){
+  x <- X.Boston.1[,j] 
+  X.Boston.1[,j] <- (x-mean(x))/sd(x)
+}
+
+Boston.1.lasso <- glmnet(X.Boston.1 , Boston$medv ,alpha=1)
+min(which(Boston.1.lasso$lambda < .75)) -> j1
+index <- coef(Boston.1.lasso)[,j1] !=0
+names(coef(Boston.1.lasso)[index,j1])
+
+plot(Boston.1.lasso, xvar = "lambda")
+
+```
+
+The plot is clearly different, since the coefficient estimates are more similar in magnitude. There are five predictors in the model when $\lambda \approx 0.75$. They are listed above.
+
+
+## Find the 1SE value of $\lambda$, using 10-fold cross-validation. What is the cross validation estimate for the residual standard error now? Does rescaling lead to a better performing model? 
+
+```{r}
+
+cv.Boston.1.lasso <- cv.glmnet(X.Boston.1 , Boston$medv ,alpha=1)
+lambda.1se.1 = cv.Boston.1.lasso$lambda.1se
+i0 <- which(cv.Boston.1.lasso$lambda == lambda.1se.1)
+rmse.Boston.1 <- cv.Boston.1.lasso$cvm[i0]
+```
+
+The computation shows that  after rescaling $\lambda_{1SE} =$ `round(lambda.1se.1, 3)`. The cross validation estimate for the residual standard error after rescaling is `round(sqrt(rmse.Boston.1), 2)`. This is slightly lower than before rescaling.
+
+
+# Python companion
+
+Regularization should be fit inside a preprocessing pipeline so scaling is learned from the training folds only.
+
+```python
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LassoCV, RidgeCV
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.metrics import mean_squared_error
+
+df = pd.read_csv("data/lab05_regularization.csv")
+X = df.drop(columns="y")
+y = df["y"]
+
+categorical = X.select_dtypes(include=["object", "category", "bool"]).columns
+numeric = X.columns.difference(categorical)
+preprocess = ColumnTransformer([
+    ("num", StandardScaler(), numeric),
+    ("cat", OneHotEncoder(drop="first", handle_unknown="ignore"), categorical),
+])
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=571)
+
+ridge = Pipeline([
+    ("preprocess", preprocess),
+    ("model", RidgeCV(alphas=[0.01, 0.1, 1, 10, 100]))
+])
+ridge.fit(X_train, y_train)
+print("Ridge alpha:", ridge.named_steps["model"].alpha_)
+print("Ridge RMSE:", mean_squared_error(y_test, ridge.predict(X_test), squared=False))
+
+lasso = Pipeline([
+    ("preprocess", preprocess),
+    ("model", LassoCV(alphas=[0.001, 0.01, 0.1, 1, 10], cv=10, max_iter=10000))
+])
+lasso.fit(X_train, y_train)
+print("Lasso alpha:", lasso.named_steps["model"].alpha_)
+print("Lasso RMSE:", mean_squared_error(y_test, lasso.predict(X_test), squared=False))
+```
+
+

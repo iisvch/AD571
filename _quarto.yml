@@ -1,0 +1,73 @@
+project:
+  type: book
+  output-dir: _book
+
+book:
+  title: "Statistical Learning"
+  author: "Nakul R. Padalkar"
+  date: today
+  chapters:
+    - index.qmd
+    - lectures/01-statistical-learning-foundations.qmd
+    - lectures/02-linear-regression.qmd
+    - lectures/03-interactions-marginal-effects.qmd
+    - lectures/04-classification-foundations.qmd
+    - lectures/05-logistic-regression-roc.qmd
+    - lectures/06-discriminant-analysis.qmd
+    - lectures/03-model-assessment-resampling.qmd
+    - lectures/04-data-splitting-feature-engineering.qmd
+    - lectures/05-model-selection-regularization.qmd
+    - lectures/06-dimension-reduction.qmd
+    - lectures/07-bias-variance-nonlinear.qmd
+    - lectures/12-polynomial-regression-step-functions.qmd
+    - lectures/13-splines-generalized-additive-models.qmd
+    - lectures/08-logistic-discriminant.qmd
+    - lectures/09-margins-perceptron.qmd
+    - lectures/10-tree-based-methods.qmd
+    - lectures/11-ensemble-methods.qmd
+    - lectures/12-support-vector-machines.qmd
+    - lectures/13-unsupervised-learning.qmd
+    - lectures/14-statistical-learning-in-practice.qmd
+    - lectures/20-applied-statistical-learning-case-studies.qmd
+    - part: "Labs"
+      chapters:
+        - labs/01-exploratory-regression.qmd
+        - labs/02-multiple-linear-regression.qmd
+        - labs/03-resampling-methods.qmd
+        - labs/04-model-selection.qmd
+        - labs/05-regularization.qmd
+        - labs/05b-dimension-reduction.qmd
+        - labs/06-nonlinear-regression.qmd
+        - labs/07-logistic-regression.qmd
+        - labs/08-discriminant-analysis.qmd
+        - labs/09-decision-trees.qmd
+        - labs/10-ensemble-methods.qmd
+        - labs/11-support-vector-machines.qmd
+
+format:
+  html:
+    theme:
+      - theme/theme.scss
+    html-math-method:
+      method: katex
+    number-equations: true
+    number-sections: true
+    toc: true
+    code-overflow: wrap
+    grid:
+      sidebar-width: 200px
+      body-width: 900px
+      margin-width: 200px
+      gutter-width: 0.5rem
+
+bibliography: references.bib
+tbl-cap-location: top
+crossref:
+  fig-title: '**Figure**'
+  fig-labels: '**arabic**'
+  title-delim: "**:**"
+  tbl-title: '**Table**'
+  tbl-labels: '**arabic**'
+editor:
+  markdown:
+    wrap: 65

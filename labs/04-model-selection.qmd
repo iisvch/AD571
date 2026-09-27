@@ -1,0 +1,572 @@
+---
+title: "Lab 04: Model Selection"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+```{r support, warning=FALSE,message=FALSE,include=FALSE}
+library(kableExtra)
+library(stargazer)
+library(flextable)
+library(dplyr)
+library(leaps)
+library(caret)
+library(ggplot2)
+library(ggExtra)
+library(tidyr)
+library(ISLR2)
+library(ISLR)
+library(readr)
+library(reticulate)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("weights", "interactions", "cjoint", "plm", "interactions", "jtools", "stats", "miceadds", "broom", "RColorBrewer", "ggstatsplot", "ggpubr", "stargazer", "sandwich", "hrbrthemes", "rms", "interplot", "coefplot", "gmodels", "car", "lattice","foreign", "ggplot2", "MASS", "Hmisc", "reshape2", "oddsratio", "tidyr", "psych", "dplyr", "tidyverse", "cjoint")
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+th <- ggplot2::theme(
+  plot.title = element_text(color="#003366", size=12, face="bold"),
+  axis.title.x = element_text(color="black", size=11, face="bold"),
+  axis.title.y = element_text(color="black", size=11, face="bold"),
+  panel.background = element_rect(fill = "white",
+                                  colour = "white",
+                                  size = 0.5, linetype = 2),
+  panel.grid.major = element_line(size = 0.5, linetype = 2,
+                                  colour = "gray80"), 
+  panel.grid.minor = element_line(size = 0.25, linetype =2,
+                                  colour = "gray80"),
+  axis.line = element_line(size = 0.53, colour = "black"),
+  panel.border = element_rect(linetype = 1, fill = NA,size=0.53),
+  axis.text = element_text(colour = "black",face="bold",size=10))
+```
+
+# How Incivility on Partisan Media (De-)Polarizes the Electorate
+
+Partisan media—typically characterized by incivility—has become a defining element of the 
+American political communication environment. While scholars have explored the consequences 
+of partisan media for political attitudes and behaviors, past work cannot disentangle the distinct 
+consequences of incivility from other features of partisan media, such as slant. The researchers 
+outline a theory about why incivility on partisan outlets shapes attitudes, and how those effects 
+depend on both the source and the audience. They test their argument using a population-based 
+survey experiment and find support for their expectations. The researchers show that incivility 
+depolarizes partisans when it comes from a same-party source (e.g., MSNBC for Democrats, Fox 
+News for Republicans). When it comes from the other-party source, however, it polarizes. They 
+find these effects, albeit to a smaller extent, even among those inclined to enjoy conflict. The 
+results raise intriguing normative questions about the trade-offs between polarization and incivility.
+
+# Import the Data
+
+Get the data file named `Gubitz cleaned.rds`. This is a cleaned dataset from the above study.  
+
+```{r civilitydata}
+civility_dat <- read_rds("Gubitz cleaned.rds")
+# head(civility_dat) %>% kbl() %>% 
+#    kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 4)
+
+```
+
+Although we want to remove the missing values for now leave them alone. Create a new dataset from the original named `civility_small`. We will also need to create categorical variables from the original dataset
+
+
+```{r varconv}
+civility_dat$s_job <- ordered(civility_dat$s_job, levels = c("non-elite", "elite"))
+civility_dat$s_job <- as.numeric(civility_dat$s_job)
+civility_dat$t_job <- ordered(civility_dat$t_job, levels = c("non-elite", "elite"))
+civility_dat$t_job <- as.numeric(civility_dat$t_job)
+civility_dat$s_white <- ordered(civility_dat$s_race, levels = c("Black", "White"))
+civility_dat$s_white <- as.numeric(civility_dat$s_white)
+civility_dat$t_white <- ordered(civility_dat$t_race, levels = c("Black", "White"))
+civility_dat$t_white <- as.numeric(civility_dat$t_white)
+
+# str(civility_dat$s_job)
+# str(civility_dat$s_inparty)
+
+# table(civility_dat$t_white)
+
+civility_dat$uncivil <- nalevs(civility_dat$uncivil)
+
+civility_small <- dplyr::select(civility_dat, uncivil, incivility, police, s_job, t_job, s_inparty, t_inparty, s_gender, t_gender, s_white, t_white)
+
+head(civility_small) %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+```
+
+
+## Original Model
+
+We now need to run the regression model to see the impact of variables. Go ahead and summarize the table and explain the effect of one significant and one insignificant variable. For example, for the variable `slurs` describe what it means to have `t-value` and `confidence interval` that you see in table.
+
+```{r model1, results='asis'}
+#base model
+OLS1 <- civility_small %>% lm(formula = uncivil ~ incivility + police + s_job + t_job + s_inparty + t_inparty + s_gender + t_gender + s_white + t_white)
+
+stargazer(OLS1, type = "html",
+          se = list(coeftest(OLS1,  cluster = civility_dat$respondent_id, vcovCL, type = 'HC1')[, 2]), 
+          covariate.labels = c("Slurs", "Threats", "Civility Policing", "Elite Speaker", 
+                               "Elite Target", "Speaker In-Party", "Target In-Party", 
+                               "Female Speaker", "Female Target", "White Speaker",
+                               "White Target"),
+          dep.var.caption  = "Dependent Variable",
+          dep.var.labels   = "Perception of Incivility",
+          report = "vc*stp",ci=TRUE,
+          omit.stat = c("rsq", "ser"),
+          notes.label = "Table 1. ",
+          model.numbers = F)
+```
+
+# Model selection by exhaustive search, forward or backward stepwise, or sequential replacement
+
+Let's now use the subset selection on the dataset.The first data frame is creating a list of variables forced in and out for the subset selection. 
+
+```{r subset, results='asis'}
+OLS.regregset <- leaps::regsubsets(uncivil~., civility_small)
+OLSregsetsum <- summary(OLS.regregset)
+Varselect <- data.frame(Forcein = OLSregsetsum$obj$force.in, 
+                         Forceout = OLSregsetsum$obj$force.out)
+Varselect %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 10)
+```
+
+We also need to see the variables included in each model. The table below will show that. so model 1 only includes `incivilityslurs` while model 2 includes `incivilityslurs` and `t_inparty`. There are 3 variables that are not included what are they?
+
+```{r outmat,}
+exhselect <- data.frame(OLSregsetsum$outmat)
+exhselect %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+```
+
+Now lets look at the detailed model measurement metrics. The $R^2$, Adjusted-$R^2$, Mellow's $C_{p}$, AIC, and BIC.. These can directly extracted from the OLS regression summary we have created in the first step.
+
+## $R^2$
+
+```{r rsqmat,}
+rsqmat <- data.frame(t(OLSregsetsum$rsq))
+rsqmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Adjusted $R^2$
+
+```{r adjrsqmat,}
+adjr2mat <- data.frame(t(OLSregsetsum$adjr2))
+adjr2mat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Mellow's $C_{p}$
+
+```{r cpmat,}
+cpmat <- data.frame(t(OLSregsetsum$cp))
+cpmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+
+## Bayesian Information Criterion (BIC)
+
+```{r bicmat,}
+bicmat <- data.frame(t(OLSregsetsum$bic))
+bicmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Diagnostic plots for the regression
+
+```{r regsetplots, fig.align='center',fig.width=10, fig.height=10,dpi=150}
+par(mfrow=c(2,2))
+plot(OLSregsetsum$rss,xlab="Number of Variables\n(a)",ylab="RSS",type="l", lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     main = "Number of Variables Vs. RSS",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+plot(OLSregsetsum$adjr2,xlab="Number of Variables\n(b)",ylab="Adjusted RSq",type="l", lwd=1.5,
+          main = "Number of Variables Vs. Adjusted R2",
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+
+points(6,OLSregsetsum$adjr2[6], col="#336699",cex=2,pch=20)
+plot(OLSregsetsum$cp,xlab="Number of Variables\n(c)",ylab="Cp",type='l', lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+      main = "Number of Variables Vs. Mellow's Cp",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+
+points(5,OLSregsetsum$cp[5],col="#336699",cex=2,pch=20)
+
+plot(OLSregsetsum$bic,xlab="Number of Variables\n(d)",ylab="BIC",type='l', lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     main = "Number of Variables Vs. BIC",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+points(3,OLSregsetsum$bic[3],col="#336699",cex=2,pch=20)
+```
+
+# Now lets do this for the missing 3 variables from the regmodel.
+
+
+```{r subset2, results='asis'}
+OLS.regregset2 <- leaps::regsubsets(uncivil~., civility_small, nvmax=11)
+OLSregsetsum2 <- summary(OLS.regregset2)
+Varselect <- data.frame(Forcein = OLSregsetsum2$obj$force.in, 
+                         Forceout = OLSregsetsum2$obj$force.out)
+Varselect %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 10)
+```
+
+We also need to see the variables included in each model. The table below will show that. so model 1 only includes `incivilityslurs` while model 2 includes `incivilityslurs` and `t_inparty`. There are 3 variables that are not included what are they?
+
+```{r outmat2,}
+exhselect <- data.frame(OLSregsetsum2$outmat)
+exhselect %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+```
+
+Now lets look at the detailed model measurement metrics. The $R^2$, Adjusted-$R^2$, Mellow's $C_{p}$, AIC, and BIC.. These can directly extracted from the OLS regression summary we have created in the first step.
+
+## $R^2$
+
+```{r rsqmat2,}
+rsqmat <- data.frame(t(OLSregsetsum2$rsq))
+rsqmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Adjusted $R^2$
+
+```{r adjrsqmat2,}
+adjr2mat <- data.frame(t(OLSregsetsum2$adjr2))
+adjr2mat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Mellow's $C_{p}$
+
+```{r cpmat2,}
+cpmat <- data.frame(t(OLSregsetsum2$cp))
+cpmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+
+## Bayesian Information Criterion (BIC)
+
+```{r bicmat2,}
+bicmat <- data.frame(t(OLSregsetsum2$bic))
+bicmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Diagnostic plots for the regression
+
+```{r regsetplots2, fig.align='center',fig.width=10, fig.height=10,dpi=150}
+par(mfrow=c(2,2))
+plot(OLSregsetsum2$rss,xlab="Number of Variables\n(a)",ylab="RSS",type="l", lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     main = "Number of Variables Vs. RSS",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+plot(OLSregsetsum2$adjr2,xlab="Number of Variables\n(b)",ylab="Adjusted RSq",type="l", lwd=1.5,
+          main = "Number of Variables Vs. Adjusted R2",
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+
+points(6,OLSregsetsum2$adjr2[6], col="#336699",cex=2,pch=20)
+plot(OLSregsetsum2$cp,xlab="Number of Variables\n(c)",ylab="Cp",type='l', lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+      main = "Number of Variables Vs. Mellow's Cp",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+
+points(5,OLSregsetsum2$cp[5],col="#336699",cex=2,pch=20)
+
+plot(OLSregsetsum2$bic,xlab="Number of Variables\n(d)",ylab="BIC",type='l', lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     main = "Number of Variables Vs. BIC",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+points(3,OLSregsetsum2$bic[3],col="#336699",cex=2,pch=20)
+```
+
+
+# Now run the same analysis for Forward Stepwise Selection for 11 variables.
+
+**If you write and run the first code by yourself remaining code is mostly copy and paste**. However, I would like you to compare all 4 iteration at the end. So you are answering These questions.
+
+Let's now use the subset selection on the dataset.The first data frame is creating a list of variables forced in and out for the subset selection. 
+
+```{r subsetf, results='asis'}
+OLS.regfor <- leaps::regsubsets(uncivil~., civility_small, method="forward",nvmax=11)
+OLSregforsum <- summary(OLS.regfor)
+Varselect <- data.frame(Forcein = OLSregforsum$obj$force.in, 
+                         Forceout = OLSregforsum$obj$force.out)
+Varselect %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 10)
+```
+
+We also need to see the variables included in each model. The table below will show that. so model 1 only includes `incivilityslurs` while model 2 includes `incivilityslurs` and `t_inparty`. There are 3 variables that are not included what are they?
+
+```{r outmatf,}
+exhselect <- data.frame(OLSregforsum$outmat)
+exhselect %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+```
+
+Now lets look at the detailed model measurement metrics. The $R^2$, Adjusted-$R^2$, Mellow's $C_{p}$, AIC, and BIC.. These can directly extracted from the OLS regression summary we have created in the first step.
+
+## $R^2$
+
+```{r rsqmatf,}
+rsqmat <- data.frame(t(OLSregforsum$rsq))
+rsqmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Adjusted $R^2$
+
+```{r adjrsqmatf,}
+adjr2mat <- data.frame(t(OLSregforsum$adjr2))
+adjr2mat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Mellow's $C_{p}$
+
+```{r cpmatf,}
+cpmat <- data.frame(t(OLSregforsum$cp))
+cpmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+
+## Bayesian Information Criterion (BIC)
+
+```{r bicmatf,}
+bicmat <- data.frame(t(OLSregforsum$bic))
+bicmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Diagnostic plots for the regression
+
+```{r regsetplotsf, fig.align='center',fig.width=10, fig.height=10,dpi=150}
+par(mfrow=c(2,2))
+plot(OLSregforsum$rss,xlab="Number of Variables\n(a)",ylab="RSS",type="l", lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     main = "Number of Variables Vs. RSS",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+
+plot(OLSregforsum$adjr2,xlab="Number of Variables\n(b)",ylab="Adjusted RSq",type="l", lwd=1.5,
+          main = "Number of Variables Vs. Adjusted R2",
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+points(6,OLSregforsum$adjr2[6], col="#336699",cex=2,pch=20)
+
+plot(OLSregsetsum$cp,xlab="Number of Variables\n(c)",ylab="Cp",type='l', lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+      main = "Number of Variables Vs. Mellow's Cp",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+points(5,OLSregforsum$cp[5],col="#336699",cex=2,pch=20)
+
+plot(OLSregforsum$bic,xlab="Number of Variables\n(d)",ylab="BIC",type='l', lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     main = "Number of Variables Vs. BIC",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+points(3,OLSregforsum$bic[3],col="#336699",cex=2,pch=20)
+```
+
+
+# Now run the same analysis for Backward Stepwise Selection for 11 variables.
+
+**If you write and run the first code by yourself remaining code is mostly copy and paste**. However, I would like you to compare all 4 iteration at the end. So you are answering These questions.
+
+Let's now use the subset selection on the dataset.The first data frame is creating a list of variables forced in and out for the subset selection. 
+
+```{r subsetb, results='asis'}
+OLS.regback <- leaps::regsubsets(uncivil~., civility_small, method="backward",nvmax=11)
+OLSregbacksum <- summary(OLS.regback)
+Varselect <- data.frame(Forcein = OLSregbacksum$obj$force.in, 
+                         Forceout = OLSregbacksum$obj$force.out)
+Varselect %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 10)
+```
+
+We also need to see the variables included in each model. The table below will show that. so model 1 only includes `incivilityslurs` while model 2 includes `incivilityslurs` and `t_inparty`. There are 3 variables that are not included what are they?
+
+```{r outmatb,}
+exhselect <- data.frame(OLSregbacksum$outmat)
+exhselect %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+```
+
+Now lets look at the detailed model measurement metrics. The $R^2$, Adjusted-$R^2$, Mellow's $C_{p}$, AIC, and BIC.. These can directly extracted from the OLS regression summary we have created in the first step.
+
+## $R^2$
+
+```{r rsqmatb,}
+rsqmat <- data.frame(t(OLSregbacksum$rsq))
+rsqmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Adjusted $R^2$
+
+```{r adjrsqmatb,}
+adjr2mat <- data.frame(t(OLSregbacksum$adjr2))
+adjr2mat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Mellow's $C_{p}$
+
+```{r cpmatb,}
+cpmat <- data.frame(t(OLSregbacksum$cp))
+cpmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+
+## Bayesian Information Criterion (BIC)
+
+```{r bicmatb,}
+bicmat <- data.frame(t(OLSregbacksum$bic))
+bicmat %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+
+```
+
+## Diagnostic plots for the regression
+
+```{r regsetplotsb, fig.align='center',fig.width=10, fig.height=10,dpi=150}
+par(mfrow=c(2,2))
+plot(OLSregbacksum$rss,xlab="Number of Variables\n(a)",ylab="RSS",type="l", lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     main = "Number of Variables Vs. RSS",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+
+plot(OLSregbacksum$adjr2,xlab="Number of Variables\n(b)",ylab="Adjusted RSq",type="l", lwd=1.5,
+          main = "Number of Variables Vs. Adjusted R2",
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+points(6,OLSregbacksum$adjr2[6], col="#336699",cex=2,pch=20)
+
+plot(OLSregbacksum$cp,xlab="Number of Variables\n(c)",ylab="Cp",type='l', lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+      main = "Number of Variables Vs. Mellow's Cp",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+points(5,OLSregbacksum$cp[5],col="#336699",cex=2,pch=20)
+
+plot(OLSregbacksum$bic,xlab="Number of Variables\n(d)",ylab="BIC",type='l', lwd=1.5,
+     cex.main=1.15,cex.lab=1.0,cex.axis=1.05,font.axis=2,font.lab=2,
+     main = "Number of Variables Vs. BIC",
+     panel.first=grid(nx = NULL, ny = NULL,col="gray", lty = 2))
+points(3,OLSregbacksum$bic[3],col="#336699",cex=2,pch=20)
+```
+
+
+# When comparing the Mellow's Cp, and BIC for the models above what would you look for?
+
+Write at least 2 paragraphs comparing the models, and how you will make the decision on the best model?
+
+# Now let's do the cross validation and see which model performs best
+
+First lets do the split of the dataset
+
+## Cross Validation Split
+
+```{r cvsplit}
+set.seed(1)
+civility_small=na.omit(civility_small)
+
+train=sample(c(TRUE,FALSE), nrow(civility_small),rep=TRUE)
+test=(!train)
+```
+
+## Lets run the regset on the trained model
+
+
+We now compute the validation set error for the best model of each model size. We first make a model matrix from the test data.
+The `model.matrix()` function is used in many regression packages for building an “X” matrix from data.
+
+```{r regtrainmod,}
+OLS.regregset3 <- leaps::regsubsets(uncivil~.,data=civility_small[train,], nvmax=11)
+OLSregsetsum3 <- summary(OLS.regregset3)
+exhselect3 <- data.frame(OLSregsetsum3$outmat)
+exhselect3 %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",font_size = 11)
+```
+
+Now we run a loop, and for each size i, we extract the coefficients from `regfit.best` for the best model of
+that size, multiply them into the appropriate columns of the test model matrix to form the predictions, and
+compute the test MSE.
+
+```{r errcalc,}
+test.mat = model.matrix(uncivil ~ ., data=civility_small[test,])
+
+val.errors = rep(NA, 11)
+for (i in 1:11) {
+  coefi=coef(OLS.regregset3,id=i)
+  pred=test.mat[,names(coefi)]%*%coefi
+  val.errors[i]=  sqrt(mean((civility_small$uncivil[test] - pred)^2))
+  # (civility_small$uncivil[test]-pred[,1])^2
+}
+val.errors
+```
+We find that the best model is the one that contains ten variables.
+
+```{r bestmod,}
+m=which.min(val.errors);m
+coef(OLS.regregset3,m)
+```
+
+
+# Python companion
+
+The Python workflow compares candidate subsets by information criteria. For larger problems, regularization is usually more practical than exhaustive subset search.
+
+```python
+import itertools
+import pandas as pd
+import statsmodels.api as sm
+
+# Adjust the file name, response, and candidate predictors to match the lab data.
+df = pd.read_csv("data/lab04.csv")
+y = df["y"]
+features = [col for col in df.columns if col != "y"]
+
+rows = []
+for k in range(1, min(len(features), 6) + 1):
+    for subset in itertools.combinations(features, k):
+        X = sm.add_constant(df[list(subset)])
+        fit = sm.OLS(y, X).fit()
+        rows.append({
+            "features": subset,
+            "k": k,
+            "aic": fit.aic,
+            "bic": fit.bic,
+            "adj_r2": fit.rsquared_adj,
+        })
+
+results = pd.DataFrame(rows).sort_values("bic")
+print(results.head(10))
+```
+

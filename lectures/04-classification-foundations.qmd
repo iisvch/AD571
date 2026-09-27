@@ -1,0 +1,121 @@
+---
+title: "Classification Foundations"
+---
+
+Classification problems ask for class labels, class probabilities, or
+ranked risk scores. Before fitting logistic regression, discriminant
+analysis, trees, or support vector machines, students need a common
+language for probability, thresholds, and error costs.
+
+## Learning Objectives
+
+- Distinguish class labels from class probabilities.
+- Explain Bayes' rule and decision boundaries.
+- Build and interpret a confusion matrix.
+- Define sensitivity, specificity, precision, and accuracy.
+- Explain how thresholds encode decision costs.
+
+## Class Probabilities and Labels
+
+A classifier often estimates
+
+$$
+p_k(x) = \Pr(Y=k \mid X=x)
+$$
+
+for each class $k$. A label is then assigned by a rule, such as choosing
+the class with the largest estimated probability. In a binary problem,
+the rule is often
+
+$$
+\hat y =
+\begin{cases}
+1, & \hat p(x) \geq c,\\
+0, & \hat p(x) < c.
+\end{cases}
+$$
+
+The threshold $c$ is a decision choice, not a law of nature.
+
+## A First Classification Example
+
+The example below creates a two-class data set, estimates a simple
+probability model, and converts probabilities into labels.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+n <- 300
+classification_data <- data.frame(
+  balance = rnorm(n, mean = 1200, sd = 450),
+  income = rnorm(n, mean = 55000, sd = 15000)
+)
+eta <- -5 + 0.003 * classification_data$balance -
+  0.00001 * classification_data$income
+classification_data$default <- rbinom(n, 1, plogis(eta))
+
+first_model <- glm(default ~ balance + income,
+                   data = classification_data,
+                   family = binomial)
+classification_data$prob <- predict(first_model, type = "response")
+classification_data$pred <- ifelse(classification_data$prob >= 0.5, 1, 0)
+table(predicted = classification_data$pred,
+      observed = classification_data$default)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+
+rng = np.random.default_rng(571)
+n = 300
+classification_data = pd.DataFrame({
+    "balance": rng.normal(1200, 450, n),
+    "income": rng.normal(55000, 15000, n)
+})
+eta = -5 + 0.003 * classification_data["balance"] - 0.00001 * classification_data["income"]
+prob = 1 / (1 + np.exp(-eta))
+classification_data["default"] = rng.binomial(1, prob)
+
+first_model = smf.logit("default ~ balance + income", data=classification_data).fit()
+classification_data["prob"] = first_model.predict(classification_data)
+classification_data["pred"] = (classification_data["prob"] >= 0.5).astype(int)
+print(pd.crosstab(classification_data["pred"], classification_data["default"]))
+```
+
+:::
+
+## Confusion Matrix Measures
+
+For a binary classifier:
+
+| Measure | Definition | Question |
+|---|---|---|
+| Accuracy | $(TP+TN)/(TP+FP+TN+FN)$ | What fraction of labels are correct? |
+| Sensitivity | $TP/(TP+FN)$ | What fraction of positives are detected? |
+| Specificity | $TN/(TN+FP)$ | What fraction of negatives are rejected? |
+| Precision | $TP/(TP+FP)$ | Among predicted positives, how many are true positives? |
+| False positive rate | $FP/(FP+TN)$ | What fraction of negatives are incorrectly flagged? |
+
+No single measure is always best. Rare-event classification often
+requires sensitivity, specificity, precision, and calibration, not just
+accuracy.
+
+## Thresholds and Costs
+
+If false negatives are costly, lower the threshold to catch more
+positives. If false positives are costly, raise the threshold. The
+model estimates probability; the threshold translates probability into
+an action.

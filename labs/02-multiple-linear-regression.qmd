@@ -1,0 +1,573 @@
+---
+title: "Lab 02: Multiple Linear Regression"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+## Recall:
+
+## Codes from the book: Multiple Linear Regression
+
+In order to fit a multiple linear regression model using least squares, we again use the lm() function. 
+
+The syntax $lm(y\sim x1+x2+x3)$ is used to fit a model with three predictors, x1, x2, and x3. The summary() function now outputs the regression coefficients for all the predictors.
+
+```{r}
+library(ISLR)
+library(MASS)
+
+lm.fit=lm(medv~lstat+age,data=Boston)
+summary(lm.fit)
+```
+
+The Boston data set contains 13 variables, and so it would be cumbersome to have to type all of these in order to perform a regression using all of the predictors. Instead, we can use the following short-hand:
+
+```{r}
+lm.fit=lm(medv~.,data=Boston)
+summary(lm.fit)
+```
+
+We can access the individual components of a summary object by name (type ?summary.lm to see what is available). Hence summary(lm.fit)$r.sq gives us the R2, and summary(lm.fit)$sigma gives us the RSE. 
+
+
+What if we would like to perform a regression using all of the variables but one? For example, in the above regression output, age has a high p-value. So we may wish to run a regression excluding this predictor. The following syntax results in a regression using all predictors except age.
+
+```{r}
+lm.fit1=lm(medv~.-age,data=Boston)
+summary(lm.fit1)
+```
+
+Interaction terms:
+
+```{r}
+summary(lm(medv~lstat*age,data=Boston))
+```
+
+Non-linear Transformations of the Predictors:
+
+```{r}
+lm.fit2=lm(medv~lstat+I(lstat^2),data=Boston)
+ summary(lm.fit2) 
+```
+
+fifth-order polynomial fit:
+
+```{r}
+lm.fit5=lm(medv~poly(lstat ,5),data=Boston)
+summary(lm.fit5)
+```
+
+log transformation.
+
+```{r}
+summary(lm(medv~log(rm),data=Boston))
+```
+
+Residual plot and other model diagnosis:
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm.fit2)
+```
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+# For your Reference:
+
+## The tidyverse
+
+1. <https://rafalab.github.io/dsbook/tidyverse.html>
+
+We can load all the tidyverse packages at once by installing and loading the tidyverse package:
+
+```{r}
+library(tidyverse)
+```
+
+2. <https://r4ds.had.co.nz/tidy-data.html>
+
+
+## tidy format
+
+You can represent the same underlying data in multiple ways. The example below shows the same data organised in four different ways. Each dataset shows the same values of four variables country, year, population, and cases, but each dataset organises the values in a different way.
+
+```{r eval=FALSE}
+table1
+#> # A tibble: 6 x 4
+#>   country      year  cases population
+#>   <chr>       <int>  <int>      <int>
+#> 1 Afghanistan  1999    745   19987071
+#> 2 Afghanistan  2000   2666   20595360
+#> 3 Brazil       1999  37737  172006362
+#> 4 Brazil       2000  80488  174504898
+#> 5 China        1999 212258 1272915272
+#> 6 China        2000 213766 1280428583
+
+table2
+#> # A tibble: 12 x 4
+#>   country      year type           count
+#>   <chr>       <int> <chr>          <int>
+#> 1 Afghanistan  1999 cases            745
+#> 2 Afghanistan  1999 population  19987071
+#> 3 Afghanistan  2000 cases           2666
+#> 4 Afghanistan  2000 population  20595360
+#> 5 Brazil       1999 cases          37737
+#> 6 Brazil       1999 population 172006362
+#> # … with 6 more rows
+
+table3
+#> # A tibble: 6 x 3
+#>   country      year rate             
+#> * <chr>       <int> <chr>            
+#> 1 Afghanistan  1999 745/19987071     
+#> 2 Afghanistan  2000 2666/20595360    
+#> 3 Brazil       1999 37737/172006362  
+#> 4 Brazil       2000 80488/174504898  
+#> 5 China        1999 212258/1272915272
+#> 6 China        2000 213766/1280428583
+
+# Spread across two tibbles
+
+table4a  # cases
+#> # A tibble: 3 x 3
+#>   country     `1999` `2000`
+#> * <chr>        <int>  <int>
+#> 1 Afghanistan    745   2666
+#> 2 Brazil       37737  80488
+#> 3 China       212258 213766
+
+table4b  # population
+#> # A tibble: 3 x 3
+#>   country         `1999`     `2000`
+#> * <chr>            <int>      <int>
+#> 1 Afghanistan   19987071   20595360
+#> 2 Brazil       172006362  174504898
+#> 3 China       1272915272 1280428583
+```
+
+We say that a data table is in tidy format if each row represents one observation and columns represent the different variables available for each of these observations.
+
+In this example, only table1 is tidy. It’s the only representation where each column is a variable.
+
+_dplyr, ggplot2, and all the other packages in the tidyverse are designed to work with tidy data._ 
+
+## Manipulating data frames
+
+The dplyr package from the tidyverse introduces functions that perform some of the most common operations when working with data frames and uses names for these functions that are relatively easy to remember. For instance, to change the data table by adding a new column, we use mutate. To filter the data table to a subset of rows, we use filter. Finally, to subset the data by selecting specific columns, we use select.
+
+### Adding a column with mutate()
+
+The function mutate takes the data frame as a first argument and the name and values of the variable as a second argument using the convention name = values. So, to add murder rates, we use:
+
+```{r}
+library(dplyr)
+library(dslabs)
+data("murders")
+murders <- mutate(murders, rate = total / population * 100000)
+#total will have the values in murders$total
+head(murders)
+```
+
+Although we have overwritten the original murders object, this does not change the object that loaded with data(murders). If we load the murders data again, the original will overwrite our mutated version.
+
+### Subsetting with filter()
+
+```{r}
+filter(murders, rate <= 0.71)
+
+```
+
+### Selecting columns with select()
+
+```{r}
+new_table <- select(murders, state, region, rate)
+filter(new_table, rate <= 0.71)
+
+```
+
+In the call to select, the first argument murders is an object, but state, region, and rate are variable names.
+
+## The pipe: %>%
+
+With dplyr we can perform a series of operations, for example select and then filter, by sending the results of one function to another using what is called the pipe operator: %>%. Some details are included below.
+
+We wrote code above to show three variables (state, region, rate) for states that have murder rates below 0.71. To do this, we defined the intermediate object new_table. In dplyr we can write code that looks more like a description of what we want to do without intermediate objects:
+
+original data ----> select ----> filter 
+ 
+
+For such an operation, we can use the pipe %>%. The code looks like this:
+
+```{r}
+murders %>% select(state, region, rate) %>% filter(rate <= 0.71)
+```
+
+In general, the pipe sends the result of the left side of the pipe to be the first argument of the function on the right side of the pipe. Here is a very simple example:
+
+```{r}
+16 %>% sqrt()
+```
+
+```{r}
+16 %>% sqrt() %>% log2()
+```
+
+```{r}
+16 %>% sqrt() %>% log(base = 2)
+```
+
+Therefore, when using the pipe with data frames and dplyr, we no longer need to specify the required first argument since the dplyr functions we have described all take the data as the first argument. 
+
+In the code we wrote:
+
+```{r}
+murders %>% select(state, region, rate) %>% filter(rate <= 0.71)
+```
+
+murders is the first argument of the select function, and the new data frame (formerly new_table) is the first argument of the filter function.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Multiple Linear Examples
+
+1. We’ll use the marketing data set, for predicting sales units on the basis of the amount of money spent in the three advertising medias (youtube, facebook and newspaper)
+
+
+
+<http://www.sthda.com/english/articles/40-regression-analysis/164-interaction-effect-in-multiple-regression-essentials/>
+
+```{r}
+library(tidyverse)
+library(caret)
+```
+
+
+```{r}
+# Load the data
+data("marketing", package = "datarium")
+
+# Inspect the data
+sample_n(marketing, 3)
+```
+
+We want to build a model for estimating sales based on the advertising budget invested in youtube, facebook and newspaper, as follow:
+
+sales = b0 + b1*youtube + b2*facebook + b3*newspaper
+
+```{r}
+model <- lm(sales ~ youtube + facebook + newspaper, data = marketing)
+summary(model)
+#plot(model)
+```
+
+As the newspaper variable is not significant, it is possible to remove it from the model:
+
+```{r}
+model  <- lm(sales ~ youtube + facebook, data = marketing)
+summary(model)
+```
+
+Finally, our model equation can be written as follow: 
+
+$$sales = 3.5 + 0.045*youtube + 0.187*facebook.$$
+
+The confidence interval of the model coefficient can be extracted as follow:
+
+```{r}
+confint(model)
+```
+
+### Model accuracy assessment:
+
+As we have seen in simple linear regression, the overall quality of the model can be assessed by examining the R-squared (R2) and Residual Standard Error (RSE).
+
+#### R-squared:
+
+
+R^2 represents the proportion of variance, in the outcome variable y. An R2 value close to 1 indicates that the model explains a large portion of the variance in the outcome variable.
+
+A problem with the R^2, is that, it will always increase when more variables are added to the model, even if those variables are only weakly associated with the response (James et al. 2014). 
+
+A solution is to adjust the R^2 by taking into account the number of predictor variables.
+
+The adjustment in the “Adjusted R Square” value in the summary output is a correction for the number of x variables included in the prediction model.
+
+
+_In our example, with youtube and facebook predictor variables, the adjusted R^2 = 0.89, meaning that “89% of the variance in the measure of sales can be predicted by youtube and facebook advertising budgets._
+
+#### Residual Standard Error (RSE) or sigma(“residual standard deviation”):
+
+The RSE estimate gives a measure of error of prediction. The lower the RSE, the more accurate the model.
+
+The error rate can be estimated by dividing the RSE by the mean outcome variable:
+
+```{r}
+sigma(model)/mean(marketing$sales)
+```
+
+In this example, the RSE is 2.023 corresponding to 12% error rate.
+
+
+#### Make predictions and Model performance
+
+We’ll randomly split the data into training set (80% for building a predictive model) and test set (20% for evaluating the model).
+
+```{r}
+head(marketing)
+dim(marketing)
+```
+
+```{r}
+# Split the data into training and test set
+#?createDataPartition
+
+#A series of test/training partitions are created using 
+#createDataPartition while createResample creates one or more bootstrap samples. 
+
+set.seed(12)
+training.samples <- marketing$sales %>%
+  createDataPartition(p = 0.8, list = FALSE)
+
+
+train.data  <- marketing[training.samples, ]
+test.data <- marketing[-training.samples, ]
+
+dim(train.data)
+dim(test.data)
+
+dim(train.data)
+dim(test.data)
+
+head(train.data)
+head(test.data)
+```
+
+
+```{r}
+# Build the model
+model1 <- lm(sales ~ youtube + facebook, data = train.data)
+summary(model1)
+```
+
+#### Make predictions
+
+The predict function is very useful for machine learning applications. This function takes a fitted object from functions such as lm or glm (we learn about glm soon) and a data frame with the new predictors for which to predict. 
+
+```{r}
+predictions <- model1 %>% predict(test.data)
+#or
+y_hat <- predict(model1, test.data)
+```
+
+
+#### Model performance
+
+```{r}
+# (a) Prediction error, RMSE (Root mean square error)
+RMSE(predictions, test.data$sales) # RMSE{caret package}
+
+# (b) R-square ## R2{caret package}
+R2(predictions, test.data$sales)
+```
+
+
+2. Interactions
+
+```{r}
+# Build the model
+# Use this: 
+model2 <- lm(sales ~ youtube + facebook + youtube:facebook,
+             data = marketing)
+
+# Or simply, use this: 
+model2 <- lm(sales ~ youtube*facebook, data = train.data)
+# Summarize the model
+
+summary(model2)
+```
+
+```{r}
+# Make predictions
+predictions <- model2 %>% predict(test.data)
+# Model performance
+# (a) Prediction error, RMSE
+RMSE(predictions, test.data$sales)
+
+# (b) R-square
+R2(predictions, test.data$sales)
+```
+
+3. Interpretation
+
+It can be seen that all the coefficients, including the interaction term coefficient, are statistically significant, suggesting that there is an interaction relationship between the two predictor variables (youtube and facebook advertising).
+
+Our model equation looks like this:
+
+$$sales = 7.89 + 0.019*youtube + 0.029*facebook + 0.0009*youtube*facebook$$
+
+** We can interpret this as an increase in youtube advertising of 1000 dollars is associated with increased sales of 
+
+$(b1 + b3*facebook)*1000 = 19 + 0.9*facebook$ units. 
+
+** And an increase in facebook advertising of 1000 dollars will be associated with an increase in sales of 
+
+$(b2 + b3*youtube)*1000 = 28 + 0.9*youtube$ units.
+
+** Note that, sometimes, it is the case that the interaction term is significant but not the main effects. The hierarchical principle states that, if we include an interaction in a model, we should also include the main effects, even if the p-values associated with their coefficients are not significant (James et al. 2014).
+
+** The prediction error RMSE of the interaction model is 1.05, which is lower than the prediction error of the additive model (1.95).
+
+** Additionally, the R-square (R2) value of the interaction model is 97% compared to only 91% for the additive model.
+
+** These results suggest that the model with the interaction term is better than the model that contains only main effects. 
+
+** So, for this specific data, we should go for the model with the interaction model.
+
+\clearpage
+
+# Lab Assignment
+
+## Q1. Discuss this example with your group.
+
+_Galton's data on the heights of parents and their children, by child._
+
+This data set lists the individual observations for 934 children in 205 families on which Galton (1886) based his cross-tabulation.
+
+
+Suppose you are tasked with building a machine learning algorithm that predicts the _son’s height_ Y, using the _father’s height_ X.
+ 
+ 
+```{r}
+library(HistData)
+
+#?GaltonFamilies
+head(GaltonFamilies)
+table(GaltonFamilies$family)
+
+set.seed(1983)
+galton_heights <- GaltonFamilies %>%
+  filter(gender == "male") %>%
+  group_by(family) %>% #grouped data frame
+  sample_n(1) %>%
+  ungroup() %>% #removes grouping
+  select(father, childHeight) %>%
+  rename(son = childHeight)
+
+head(galton_heights)
+```
+
+(i) Let's split the data into training and testing.
+
+```{r}
+#?slice
+#slice() lets you index rows by their (integer) locations. 
+#It allows you to select, remove, and duplicate rows. 
+
+y <- galton_heights$son
+test_index <- createDataPartition(y, times = 1, p = 0.3, list = FALSE) #30% for the test set
+
+train_set <- galton_heights %>% slice(-test_index)
+test_set <- galton_heights %>% slice(test_index)
+```
+
+(ii) The _best guess(prediction)_ would be the mean;
+
+```{r}
+(yhat <- mean(train_set$son))
+
+# then the error would be (yhat-ybar)
+
+mean((yhat - test_set$son)^2)
+```
+
+(iii) Can we do better? Yes.
+
+$$f(x) = E(Y|X=x) = \beta_0 + \beta_1 x$$
+
+```{r}
+fit <- lm(son ~ father, data = train_set)
+fit$coef
+```
+
+$$\hat{f}(x) = 43.7+ 0.36 x$$
+
+We can see that this does indeed provide an improvement over our guessing approach.
+
+
+```{r}
+y_hat <- fit$coef[1] + fit$coef[2]*test_set$father
+mean((y_hat - test_set$son)^2)
+```
+
+(iv) Predict
+
+```{r}
+y_hat <- predict(fit, test_set)
+mean((y_hat - test_set$son)^2)
+```
+
+Learn more;
+
+```{r eval=FALSE}
+?predict.lm
+?predict.glm
+```
+
+many machine learning algorithms have a predict function.
+
+
+## Q2: Coefficient Interpretation
+
+Suppose we have the following model to estimate GPA for Georgetown undergraduate students.
+
+$$GPA = \beta_0 + \beta_1 * Female + \beta_2 Age $$
+
+Where _Age_ is a continuous variable measured in years and gender is encoded as:
+
+  * Female = 1 if student is female
+  * Female = 0 if student is male
+
+  
+a) What is the interpretation of the $\beta_0$ coefficient?
+
+b) What is the interpretation of the $\beta_1$ coefficient?
+
+c) Suppose $\beta_0=1.5$ and $\beta_1=.5$ and  $\beta_2=1.5$.  What is the expected GPA of a student who is male and 20 years old?
+
+d) Suppose you believe that males have lower GPAs than females. Further, suppose you believe that GPA tends to decrease as students get older. What would this imply about the signs of the coefficients of the model?
+
+e) Suppose we change the units of measurement for _Age_ from years to days. What effect would that have on $\beta_2$? This is an important reminder about interpreting the absolute magnitude of the coefficients.
+
+
+# Python companion
+
+The Python version uses formula syntax for interpretability and a train/test split for out-of-sample checking.
+
+```python
+import pandas as pd
+import statsmodels.formula.api as smf
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+
+# Adjust the file name, response, and predictors to match the lab data.
+df = pd.read_csv("data/lab02.csv")
+
+train, test = train_test_split(df, test_size=0.30, random_state=571)
+model = smf.ols("y ~ x1 + x2 + x3", data=train).fit()
+print(model.summary())
+
+pred = model.predict(test)
+print("RMSE:", mean_squared_error(test["y"], pred, squared=False))
+print("R-squared:", r2_score(test["y"], pred))
+
+interaction_model = smf.ols("y ~ x1 * x2 + x3", data=train).fit()
+print(interaction_model.summary())
+```
+

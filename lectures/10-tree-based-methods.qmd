@@ -1,0 +1,181 @@
+---
+title: "Tree-Based Methods"
+---
+
+Tree-based methods partition the predictor space into regions and make
+simple predictions inside each region. A single tree is easy to explain
+and capable of representing interactions and nonlinearities, but it can
+be unstable. That instability motivates ensemble methods in the next
+chapter.
+
+## Learning Objectives
+
+- Explain recursive binary splitting.
+- Distinguish regression trees and classification trees.
+- Interpret impurity, tree depth, terminal nodes, and pruning.
+- Use cross-validation to choose tree complexity.
+- Compare a tree with a linear or logistic baseline.
+
+## Recursive Binary Splitting
+
+A decision tree repeatedly splits the predictor space. At each step, it
+chooses a variable and cut point that best improve the fit.
+
+For regression trees, a common objective is reduction in residual sum
+of squares. For classification trees, common impurity measures include
+the Gini index
+
+$$
+G = \sum_{k=1}^{K}\hat p_{mk}(1-\hat p_{mk})
+$$
+
+and cross-entropy
+
+$$
+D = -\sum_{k=1}^{K}\hat p_{mk}\log(\hat p_{mk}),
+$$
+
+where $\hat p_{mk}$ is the proportion of class $k$ observations in node
+$m$.
+
+## Tree Structure
+
+A fitted tree contains:
+
+| Term | Meaning |
+|---|---|
+| Root node | The full training data before any split |
+| Internal node | A region that is split again |
+| Terminal node | A final region used for prediction |
+| Depth | Number of split levels from root to leaf |
+| Split rule | A predictor threshold or category partition |
+| Prediction | Mean response or class distribution inside a terminal node |
+
+Prediction follows a path of questions. This makes trees easy to
+communicate to nontechnical audiences.
+
+## Ames and Carseats Examples
+
+In a housing example, a regression tree may split first on overall
+quality or living area, then on neighborhood, age, or basement size. In
+a car-seat sales example, a tree may split on shelving location, price,
+advertising, or competitor price.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(rpart)
+
+sales_tree <- rpart(Sales ~ ., data = ISLR::Carseats)
+printcp(sales_tree)
+plot(sales_tree)
+text(sales_tree, use.n = TRUE)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.tree import DecisionTreeRegressor, plot_tree
+import matplotlib.pyplot as plt
+
+X = carseats.drop(columns=["Sales"])
+y = carseats["Sales"]
+categorical = X.select_dtypes(exclude="number").columns
+
+preprocess = ColumnTransformer([
+    ("categorical", OneHotEncoder(handle_unknown="ignore"), categorical)
+], remainder="passthrough")
+
+sales_tree = make_pipeline(
+    preprocess,
+    DecisionTreeRegressor(random_state=571, min_samples_leaf=10)
+).fit(X, y)
+
+plt.figure(figsize=(12, 6))
+plot_tree(sales_tree.named_steps["decisiontreeregressor"], max_depth=3)
+plt.show()
+```
+
+:::
+
+The tree should be read as a set of local comparisons. A split near the
+root affects many observations; a split near a leaf affects a smaller
+subgroup.
+
+## Stopping and Pruning
+
+A fully grown tree can overfit. Tree complexity can be controlled by
+minimum node size, maximum depth, minimum improvement, or
+cost-complexity pruning.
+
+Cost-complexity pruning chooses a subtree by minimizing
+
+$$
+\sum_{m=1}^{|T|} \sum_{i:x_i \in R_m}(y_i-\hat y_{R_m})^2
++ \alpha |T|.
+$$
+
+The tuning parameter $\alpha$ penalizes tree size. Larger values produce
+smaller trees.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+best_cp <- sales_tree$cptable[
+  which.min(sales_tree$cptable[, "xerror"]),
+  "CP"
+]
+pruned_tree <- prune(sales_tree, cp = best_cp)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+tree_model = sales_tree.named_steps["decisiontreeregressor"]
+path = tree_model.cost_complexity_pruning_path(
+    sales_tree.named_steps["columntransformer"].transform(X),
+    y
+)
+ccp_alphas = path.ccp_alphas
+print(ccp_alphas[:10])
+```
+
+:::
+
+Cross-validation should be used to choose the pruning level. A smaller
+tree with nearly the same error is often preferable because it is easier
+to explain and less sensitive to noise.
+
+## Strengths and Limits
+
+Trees naturally capture:
+
+- nonlinear relationships,
+- interactions,
+- threshold effects,
+- mixed numeric and categorical predictors.
+
+Their main weakness is variance. A small change in the training data
+can produce a different first split, which changes the whole tree. A
+single tree is therefore useful for interpretation and exploration, but
+not always the most accurate predictor.

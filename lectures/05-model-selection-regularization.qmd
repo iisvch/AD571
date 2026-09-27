@@ -1,0 +1,240 @@
+---
+title: "Model Selection and Regularization"
+---
+
+Model selection asks which predictors and which level of complexity
+should be used. Regularization answers the same question by changing
+the estimation problem: instead of choosing one subset of predictors
+directly, it penalizes coefficient size or coefficient count.
+
+## Learning Objectives
+
+- Compare best subset, forward stepwise, and backward stepwise
+  selection.
+- Use adjusted $R^2$, $C_p$, BIC, AIC, validation error, and
+  cross-validation error.
+- Explain ridge regression and lasso as penalized least squares.
+- Describe why standardization matters for penalized regression.
+- Use cross-validation to choose a tuning parameter.
+
+## Why Selection Is Hard
+
+With $p$ predictors, best subset selection considers $2^p$ possible
+models. That search can find a model that fits the training data well,
+but the search itself adds variability. The selected model may look
+more certain than it really is because the same data were used to try
+many alternatives.
+
+Selection should therefore be evaluated with a criterion that accounts
+for complexity or with held-out prediction error.
+
+## Subset and Stepwise Selection
+
+Best subset selection chooses the best model of each size. Forward
+stepwise selection starts from the intercept-only model and adds one
+predictor at a time. Backward stepwise selection starts from the full
+model and removes one predictor at a time.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(leaps)
+
+subset_fit <- regsubsets(Sale_Price ~ ., data = train, nvmax = 20)
+subset_summary <- summary(subset_fit)
+
+which.min(subset_summary$bic)
+which.max(subset_summary$adjr2)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import itertools
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+
+predictors = [col for col in train.columns if col != "Sale_Price"]
+records = []
+
+for size in range(1, min(len(predictors), 5) + 1):
+    for cols in itertools.combinations(predictors, size):
+        X = sm.add_constant(pd.get_dummies(train[list(cols)], drop_first=True))
+        fit = sm.OLS(train["Sale_Price"], X).fit()
+        records.append({
+            "size": size,
+            "predictors": cols,
+            "aic": fit.aic,
+            "bic": fit.bic,
+            "adj_r2": fit.rsquared_adj
+        })
+
+subset_summary = pd.DataFrame(records)
+print(subset_summary.sort_values("bic").head())
+print(subset_summary.sort_values("adj_r2", ascending=False).head())
+```
+
+:::
+
+The resulting model path can be compared using:
+
+| Criterion | Preference | Caution |
+|---|---|---|
+| Training RSS | Larger models | Always decreases as predictors are added |
+| Adjusted $R^2$ | Fit adjusted for model size | Still an in-sample measure |
+| Mallows' $C_p$ | Low estimated prediction error | Depends on variance estimate |
+| AIC | Predictive fit with lighter penalty | Can select larger models |
+| BIC | Fit with stronger penalty | Often selects simpler models |
+| Cross-validation | Held-out predictive performance | Depends on split design |
+
+## Media Incivility Selection Example
+
+A model-selection analysis should connect the criterion to the research
+question. For a media-incivility outcome with many political,
+platform, or text features, an exhaustive search can identify candidate
+models of each size, while forward and backward selection provide
+computationally cheaper alternatives.
+
+The analysis workflow is:
+
+1. define the outcome and candidate predictors,
+2. split the data or define cross-validation folds,
+3. fit the candidate model paths on the training data,
+4. compare $R^2$, adjusted $R^2$, $C_p$, BIC, and validation error,
+5. refit the selected specification on the training data,
+6. evaluate once on the held-out data,
+7. describe the selected predictors without overstating certainty.
+
+## Ridge Regression
+
+Ridge regression minimizes
+
+$$
+\sum_{i=1}^{n}(y_i - x_i^\top\beta)^2
++ \lambda \sum_{j=1}^{p}\beta_j^2.
+$$
+
+The $\ell_2$ penalty shrinks coefficients toward zero but usually does
+not set them exactly to zero. Ridge is especially helpful when
+predictors are correlated: it distributes signal across related
+variables and lowers variance.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(glmnet)
+
+x_train <- model.matrix(Apps ~ ., College)[, -1]
+y_train <- College$Apps
+
+ridge_cv <- cv.glmnet(x_train, y_train, alpha = 0)
+coef(ridge_cv, s = "lambda.min")
+coef(ridge_cv, s = "lambda.1se")
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import RidgeCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+
+x_train = pd.get_dummies(college.drop(columns=["Apps"]), drop_first=True)
+y_train = college["Apps"]
+
+ridge_cv = make_pipeline(
+    StandardScaler(),
+    RidgeCV(alphas=np.logspace(-3, 3, 100))
+)
+ridge_cv.fit(x_train, y_train)
+
+print(ridge_cv.named_steps["ridgecv"].alpha_)
+```
+
+:::
+
+## Lasso
+
+The lasso minimizes
+
+$$
+\sum_{i=1}^{n}(y_i - x_i^\top\beta)^2
++ \lambda \sum_{j=1}^{p}|\beta_j|.
+$$
+
+The $\ell_1$ penalty can set coefficients exactly to zero, so lasso is
+both a prediction method and a variable-selection method. When
+predictors are strongly correlated, lasso may choose one representative
+predictor and ignore others with similar information.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+lasso_cv <- cv.glmnet(x_train, y_train, alpha = 1)
+coef(lasso_cv, s = "lambda.min")
+coef(lasso_cv, s = "lambda.1se")
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.linear_model import LassoCV
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+lasso_cv = make_pipeline(
+    StandardScaler(),
+    LassoCV(cv=10, random_state=571, max_iter=10000)
+)
+lasso_cv.fit(x_train, y_train)
+
+print(lasso_cv.named_steps["lassocv"].alpha_)
+```
+
+:::
+
+`lambda.min` gives the value with the lowest cross-validation error.
+`lambda.1se` gives the simplest model whose error is within one
+standard error of the minimum. The one-standard-error rule is often a
+good teaching device because it makes the accuracy-simplicity tradeoff
+explicit.
+
+## Scaling and Interpretation
+
+Penalties operate on coefficient size, so predictors must be on
+comparable scales. Otherwise a variable measured in large units may be
+penalized differently from a variable measured in small units. Most
+software standardizes predictors internally by default, but analysts
+should know whether and how that standardization occurred.
+
+After penalized regression, coefficient interpretation should be
+careful. Shrinkage intentionally biases coefficients toward zero to
+reduce variance. Penalized coefficients are not ordinary least-squares
+estimates with ordinary standard errors.

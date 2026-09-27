@@ -1,0 +1,309 @@
+---
+title: "Lab 03: Resampling Methods"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+```{r support, warning=FALSE,message=FALSE,include=FALSE}
+library(kableExtra)
+library(stargazer)
+library(flextable)
+library(dplyr)
+library(ggplot2)
+library(ggExtra)
+library(tidyr)
+library(ISLR2)
+library(ISLR)
+library(reticulate)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE, warning = FALSE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+th <- ggplot2::theme(
+  plot.title = element_text(color="#003366", size=12, face="bold"),
+  axis.title.x = element_text(color="black", size=11, face="bold"),
+  axis.title.y = element_text(color="black", size=11, face="bold"),
+  panel.background = element_rect(fill = "white",
+                                  colour = "white",
+                                  size = 0.5, linetype = 2),
+  panel.grid.major = element_line(size = 0.5, linetype = 2,
+                                  colour = "gray80"), 
+  panel.grid.minor = element_line(size = 0.25, linetype =2,
+                                  colour = "gray80"),
+  axis.line = element_line(size = 0.53, colour = "black"),
+  panel.border = element_rect(linetype = 1, fill = NA,size=0.53),
+  axis.text = element_text(colour = "black",face="bold",size=10))
+```
+
+
+# Consider a regression problem with the Car seat dataset.
+
+```{r dataimport}
+Carseats <- ISLR::Carseats
+
+head(Carseats) %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+
+## Fit a linear model to predict Sales from all other attributes. Looking at the model summary, what is the residual error? Use the fitted model to make predictions on the test set, and check the model performance by calculating the root mean squared error and R squared values.
+
+Lets first split the dataset in test and train and fit the model on training dataset. 
+
+```{r modelfit, results='asis',}
+split<- sample(c(rep(0, 0.8 * nrow(Carseats)), rep(1, 0.2 * nrow(Carseats))))
+
+train.data <- Carseats[split == 0, ]            
+test.data <- Carseats[split == 1, ]            
+
+carfit <- lm(Sales~.,data = train.data)
+```
+
+Equation 1 shows the regression model for the `carseats` dataset. The residual error for the model is `sigma(carfit)`, this can also be seen from the regression table. The $R^2$ Squared value for the model is `summary(carfit)$r.squared`, while the Adjusted $R^2$ Squared value is `summary(carfit)$adj.r.squared`.
+
+$$
+\begin{aligned}
+Sales & = `carfit$coefficients[1]` \times  CompPrice + `carfit$coefficients[2]` \times Income + `carfit$coefficients[3]` \times Advertising + `carfit$coefficients[4]` \times Population \\
+& + `carfit$coefficients[5]` \times Price `carfit$coefficients[6]` \times    ShelveLoc + `carfit$coefficients[7]` \times Age + `carfit$coefficients[8]` \times Education \\
+& + `carfit$coefficients[9]` \times Urban `carfit$coefficients[10]` \times US 
+\end{aligned} \tag{1}
+$$
+
+Let's predict the values for Test dataset and see its details. 
+```{r fitpred, message=FALSE,warning=FALSE}
+library(tidyverse)
+library(caret)
+pred = carfit %>% predict(test.data)
+rmse1 <- RMSE(pred, test.data$Sales);
+r21 <- R2(pred, test.data$Sales);
+```
+
+The RMSE value for the predicted dataset is `rmse1` and the $R^2$ Squared value for the predicted data points is `r21`.
+
+```{r fittab, results='asis',}
+stargazer::stargazer(carfit, type='html', summary=TRUE,
+                     title = "Full Regression Model for Car Sales",
+                     report = "vc*stp",ci=TRUE)
+```
+
+
+## Fit another linear model, but now do not include the predictor's Population, Education, Urban, and the US. What is the residual error? Use the fitted model to make predictions on the test set, and check the model performance by calculating the root mean squared error and R squared values.
+
+```{r modelfit2, results='asis',}
+carfit2 <- lm(Sales ~ CompPrice + Income + Advertising + Price + 
+    ShelveLoc + Age, data = train.data)
+```
+
+Keeping the same train and test split, equation 2 shows the alternative regression model for the `carseats` dataset. The residual error for the model is `sigma(carfit2)`, this can also be seen from the regression table. The $R^2$ Squared value for the model is `summary(carfit2)$r.squared`, while the Adjusted $R^2$ Squared value is `summary(carfit2)$adj.r.squared`.
+
+$$
+\begin{aligned}
+Sales & = `carfit$coefficients[1]` \times  CompPrice + `carfit$coefficients[2]` \times Income + `carfit$coefficients[3]` \times Advertising \\
+& + `carfit$coefficients[4]` \times Price + `carfit$coefficients[5]` \times    ShelveLoc `carfit$coefficients[6]` \times Age + `carfit$coefficients[7]`
+\end{aligned} \tag{2}
+$$
+
+Let's Predict the values for Test dataset and see its details. 
+```{r fitpred2, message=FALSE,warning=FALSE}
+library(tidyverse)
+library(caret)
+pred2 = carfit2 %>% predict(test.data)
+RMSE(pred2, test.data$Sales)
+R2(pred2, test.data$Sales)
+
+```
+
+The RMSE value for the predicted dataset is `RMSE(pred2, test.data$Sales)` and the $R^2$ Squared value for the predicted data points is `R2(pred2, test.data$Sales)`.
+
+```{r fittab2, results='asis',}
+stargazer::stargazer(carfit,carfit2, type='html', summary=TRUE,
+                     title = "Two Regression Models for Car Sales",
+                     report = "vc*stp",ci=TRUE)
+```
+
+
+## How do determine which model is better?
+Looking at the model, we can see that the goodness of fit $R^2$-squared values for both models is alomst same (M1=`R2(pred, test.data$Sales)`, M2=`R2(pred2, test.data$Sales)`), while Adjusted-$R^2$-squared value for the first model is slightly better (M1=`R2(pred, test.data$Sales)`, M2=`R2(pred2, test.data$Sales)`). Root Mean Squared values (RMSE) for both model are very close with model 1 performing slightly better (M1=`RMSE(pred, test.data$Sales)`, M2=`RMSE(pred2, test.data$Sales)`).
+
+However, Model 2 performs significantly better when we look at the [F-test](https://sites.duke.edu/bossbackup/files/2013/02/FTestTutorial.pdf), we see that the model 2 performs better (M1=`summary(carfit)$fstatistic[1]`, M2= `summary(carfit2)$fstatistic[1]`). We can also perform an Anova Test that compares both model.
+
+```{r modcomp, results='asis'}
+caranova <- anova(carfit,carfit2)
+caranova %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+Since the anova test does not show the significance between two models (look at the p value and the f-test). We can not say that the models differ from each other.  
+
+## Create a new train/test split of the data and retrain your model. Which model is the best?
+I think you can do this by yourself using the code above. This time choose 70/30 split. Make sure to **write** your findings. I will ask TA's to look for descriptions in addition to the tables. 
+
+## Use the cv.glm() function from the 'boot' library to conduct a cross-validation analysis.
+
+```{r cvfits, results='asis', warning=FALSE,message=FALSE}
+library(leaps)
+library(boot)
+
+predict.regsubsets = function(object, newdata, id, ...){
+form=as.formula(object$call[[2]])
+mat=model.matrix(form, newdata)
+coefi=coef(object, id=id)
+xvars=names(coefi)
+mat[,xvars]%*%coefi
+}
+
+glmfit1 <- glm(Sales ~ ., data = Carseats)
+glmfit2 <- glm(Sales ~ CompPrice + Income + Advertising + Price + 
+    ShelveLoc + Age, data = Carseats)
+stargazer::stargazer(glmfit1,glmfit2, type='html', summary=TRUE,
+                     title = "Two Generalized Regression Model for Car Sales",
+                     report = "vc*stp",ci=TRUE)
+```
+
+### Run 5-fold
+
+```{r modcv5,}
+CV5mod.car1 <- cv.glm(data = Carseats, glmfit = glmfit1, K = 5)
+CV5mod.car2 <- cv.glm(data = Carseats, glmfit = glmfit2, K = 5)
+errvals <- data.frame(cbind(CV5mod.car1$delta,CV5mod.car2$delta))
+colnames(errvals) <- c("Model 1","Model 2")
+errvals %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+### 10-fold
+
+```{r modcv10,}
+CV10mod.car1 <- cv.glm(data = Carseats, glmfit = glmfit1, K = 10)
+CV10mod.car2 <- cv.glm(data = Carseats, glmfit = glmfit2, K = 10)
+
+errvals <- data.frame(cbind(CV10mod.car1$delta,CV10mod.car2$delta))
+colnames(errvals) <- c("Model 1","Model 2")
+errvals %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+### Leave One Out cross-validation for parts 1 and 2 above. Which model has a lower error?
+
+
+```{r mod1}
+cv.err1 = cv.glm(data = Carseats, glmfit = glmfit1);
+cv.err2 = cv.glm(data = Carseats, glmfit = glmfit2);
+errvals <- data.frame(cbind(cv.err1$delta,cv.err2$delta))
+colnames(errvals) <- c("Model 1","Model 2")
+errvals %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+For Model 1 our cross-validation test error is `cv.err1$delta[1]`, and for model 2 is `cv.err2$delta[1]`, this is also listed in table above.
+
+# Here is a synthetic (noisy) dataset (use the r chunk below as it is).
+```{r syndata, fig.align='center', fig.width=5,fig.height=4.25}
+mydf = data.frame(x = runif(100,min = -10, max = 10))
+mydf$y = sin(mydf$x) + .1*mydf$x^2 + rnorm(100)
+plot(y ~ x, data = mydf, pch=21, bg="#336699", xlab="X", ylab="Y", main="Scatter plot of X and Y")
+```
+
+## Fit a linear model to this data. Use 10-fold CV to estimate the generalization (calculated from CV) error.
+
+```{r syndatacv10,results='asis'}
+m1 <- glm(y ~ x, data = mydf)
+
+CV10mod <- cv.glm(data = mydf, glmfit =m1, K = 10)
+
+errvals <- data.frame(cbind(CV10mod$delta))
+colnames(errvals) <- c("Model 1")
+errvals %>% kbl() %>% 
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+
+## Use the poly() function to fit a quadratic model to this data. Use 10-fold CV to estimate the error.
+
+```{r polyfit}
+cv.error <- numeric(5)
+for(i in 1:5){
+  glm.fit <- glm(y ~ poly(x, i), data = mydf)
+  cv.error[i] <- cv.glm(data = mydf, glmfit = glm.fit, K=10)$delta[1]
+}
+cv.error <- data.frame(t(cv.error))
+colnames(cv.error) <- c("Model 1","Model 2","Model3","Model 4","Model 5")
+cv.error %>% kbl() %>%
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+
+## Repeat this for polynomials up to order 15. Make a plot of the generalization error (calculated from CV) versus the order of the polynomial.
+
+
+```{r polyfit15}
+cv.error <- numeric(15)
+for(i in 1:15){
+  glm.fit <- glm(y ~ poly(x, i), data = mydf)
+  cv.error[i] <- cv.glm(data = mydf, glmfit = glm.fit, K=10)$delta[1]
+}
+cv.error <- data.frame(t(cv.error))
+colnames(cv.error) <- c("Model 1","Model 2","Model 3","Model 4","Model 5","Model 6","Model 7","Model 8","Model 9","Model 10","Model 11","Model 12","Model 13","Model 14","Model 15")
+cv.error %>% kbl() %>%
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center", font_size = 7)
+```
+
+```{python names, }
+import statsmodels as sm
+from sklearn import linear_model as lm
+reg = lm.LinearRegression()
+reg.fit([[0, 0], [1, 1], [2, 2]], [0, 1, 2])
+
+reg.coef_
+```
+
+
+# Python companion
+
+The Python workflow uses repeated train/test splits and cross-validation to estimate how well a model is expected to generalize.
+
+```python
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import KFold, cross_val_score, train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+
+carseats = pd.read_csv("data/carseats.csv")
+X = carseats.drop(columns="Sales")
+y = carseats["Sales"]
+
+categorical = X.select_dtypes(include=["object", "category", "bool"]).columns
+numeric = X.columns.difference(categorical)
+preprocess = ColumnTransformer([
+    ("num", "passthrough", numeric),
+    ("cat", OneHotEncoder(drop="first", handle_unknown="ignore"), categorical),
+])
+
+model = Pipeline([
+    ("preprocess", preprocess),
+    ("regression", LinearRegression()),
+])
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=571)
+model.fit(X_train, y_train)
+pred = model.predict(X_test)
+print("Test RMSE:", mean_squared_error(y_test, pred, squared=False))
+print("Test R-squared:", r2_score(y_test, pred))
+
+cv = KFold(n_splits=10, shuffle=True, random_state=571)
+rmse = -cross_val_score(model, X, y, cv=cv, scoring="neg_root_mean_squared_error")
+print("10-fold CV RMSE:", rmse.mean())
+```
+
+

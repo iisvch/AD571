@@ -1,0 +1,179 @@
+---
+title: "Ensemble Methods"
+---
+
+Ensembles improve prediction by combining many models. A single tree
+can have high variance; bagging, random forests, and boosting use many
+trees to produce more accurate and stable predictions.
+
+## Learning Objectives
+
+- Explain why averaging many models can reduce variance.
+- Compare bagging, random forests, and boosting.
+- Tune ensemble models using resampling.
+- Interpret variable importance and partial dependence with caution.
+- Evaluate whether extra accuracy is worth lower transparency.
+
+## Averaging and Variance Reduction
+
+If several predictors are unbiased and not perfectly correlated,
+averaging them can reduce variance. Bagging applies this idea to trees:
+fit many trees on bootstrap samples and average their predictions.
+
+For regression,
+
+$$
+\hat f_{\text{bag}}(x)
+= \frac{1}{B}\sum_{b=1}^{B}\hat f^{*b}(x).
+$$
+
+For classification, trees can vote or average class probabilities.
+
+## Bagging
+
+Bagging uses bootstrap samples to create many training sets. Each tree
+is usually grown deeply, so individual trees are flexible and unstable.
+The average is more stable than any one tree.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(randomForest)
+
+bag_fit <- randomForest(
+  High ~ .,
+  data = train,
+  mtry = ncol(train) - 1,
+  importance = TRUE
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.ensemble import RandomForestClassifier
+
+bag_fit = RandomForestClassifier(
+    n_estimators=500,
+    max_features=None,
+    random_state=571
+)
+bag_fit.fit(X_train, y_train)
+```
+
+:::
+
+When `mtry` equals the number of predictors, each split can consider
+all variables. This is bagging for tree models.
+
+## Random Forests
+
+Random forests modify bagging by allowing each split to consider only a
+random subset of predictors. This decorrelates the trees. If one
+predictor is very strong, ordinary bagging may use it near the top of
+many trees, making the trees similar. Random predictor selection gives
+other variables a chance to define different partitions.
+
+Important tuning parameters include:
+
+| Parameter | Effect |
+|---|---|
+| Number of trees | More trees stabilize the average |
+| `mtry` | Smaller values decorrelate trees more strongly |
+| Node size | Controls depth and local flexibility |
+| Sampling scheme | Affects class balance and bootstrap variation |
+
+## Boosting
+
+Boosting builds an additive model sequentially:
+
+$$
+\hat f(x) = \sum_{b=1}^{B}\lambda \hat f_b(x).
+$$
+
+Each new tree focuses on structure that the current ensemble has not
+captured well. The learning rate $\lambda$ controls how much each tree
+contributes. Smaller learning rates usually require more trees but can
+generalize better.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(gbm)
+
+boost_fit <- gbm(
+  Sales ~ .,
+  data = train,
+  distribution = "gaussian",
+  n.trees = 3000,
+  interaction.depth = 3,
+  shrinkage = 0.01,
+  cv.folds = 5
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.ensemble import GradientBoostingRegressor
+
+boost_fit = GradientBoostingRegressor(
+    n_estimators=3000,
+    learning_rate=0.01,
+    max_depth=3,
+    random_state=571
+)
+boost_fit.fit(X_train, y_train)
+```
+
+:::
+
+Boosting is powerful, but it has more tuning choices: number of trees,
+learning rate, interaction depth, and minimum observations in terminal
+nodes.
+
+## Comparing Tree Ensembles
+
+A disciplined comparison uses the same split or resampling plan for all
+models:
+
+1. fit a pruned single tree,
+2. fit a bagged tree ensemble,
+3. fit a random forest,
+4. fit a boosted tree model,
+5. tune only inside training folds,
+6. evaluate the selected models on held-out data.
+
+The comparison should include both predictive performance and the cost
+of complexity.
+
+## Interpretation
+
+Ensembles are less transparent than single trees, but several summaries
+help:
+
+| Tool | Use | Caution |
+|---|---|---|
+| Variable importance | Ranks influential predictors | Can be biased by scale or cardinality |
+| Partial dependence | Shows average fitted effect | Can be misleading with strong interactions |
+| Individual conditional curves | Shows heterogeneity across observations | Can be crowded and noisy |
+| Test performance | Measures generalization | Does not explain the model alone |
+
+Interpretation should be tied to the fitted model and the data
+distribution, not treated as a causal explanation.

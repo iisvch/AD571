@@ -1,0 +1,60 @@
+---
+title: "Preface"
+author: "Nakul R. Padalkar"
+date-modified: today
+date-format: long
+format:
+  html:
+    code-overflow: wrap
+    number-sections: true
+    number-depth: 3
+    toc: true
+    toc-depth: 2
+---
+
+This book is a comprehensive course in statistical machine learning. It
+is organized as a single sequence that combines concepts, reproducible
+examples, and guided analysis.
+
+The course is organized around a practical sequence:
+
+1. Build statistical learning intuition from prediction, inference, and
+   model error.
+2. Use linear models as the first complete workflow for estimation,
+   interpretation, diagnostics, and generalization.
+3. Extend regression through interactions, classification, logistic
+   regression, discriminant analysis, resampling, feature engineering,
+   model selection, regularization, dimension reduction, nonlinear
+   regression, trees, ensembles, support vector machines, and
+   unsupervised learning.
+4. End with reproducible model development, applied case studies, and
+   the judgment needed to teach or deploy statistical learning
+   responsibly.
+
+## Book Structure
+
+The main body is an expanded book of 21 chapters:
+
+| Chapter | Topic |
+|---:|---|
+| 1 | [Statistical Learning Foundations](lectures/01-statistical-learning-foundations.qmd) |
+| 2 | [Linear Regression](lectures/02-linear-regression.qmd) |
+| 3 | [Interactions and Marginal Effects](lectures/03-interactions-marginal-effects.qmd) |
+| 4 | [Classification Foundations](lectures/04-classification-foundations.qmd) |
+| 5 | [Logistic Regression and ROC Analysis](lectures/05-logistic-regression-roc.qmd) |
+| 6 | [Discriminant Analysis](lectures/06-discriminant-analysis.qmd) |
+| 7 | [Model Assessment and Resampling](lectures/03-model-assessment-resampling.qmd) |
+| 8 | [Data Splitting and Feature Engineering](lectures/04-data-splitting-feature-engineering.qmd) |
+| 9 | [Model Selection and Regularization](lectures/05-model-selection-regularization.qmd) |
+| 10 | [Dimension Reduction](lectures/06-dimension-reduction.qmd) |
+| 11 | [Bias, Variance, and Nonlinear Models](lectures/07-bias-variance-nonlinear.qmd) |
+| 12 | [Polynomial Regression and Step Functions](lectures/12-polynomial-regression-step-functions.qmd) |
+| 13 | [Splines and Generalized Additive Models](lectures/13-splines-generalized-additive-models.qmd) |
+| 14 | [Classification Model Comparison](lectures/08-logistic-discriminant.qmd) |
+| 15 | [Margins and Perceptron](lectures/09-margins-perceptron.qmd) |
+| 16 | [Tree-Based Methods](lectures/10-tree-based-methods.qmd) |
+| 17 | [Ensemble Methods](lectures/11-ensemble-methods.qmd) |
+| 18 | [Support Vector Machines](lectures/12-support-vector-machines.qmd) |
+| 19 | [Unsupervised Learning](lectures/13-unsupervised-learning.qmd) |
+| 20 | [Statistical Learning in Practice](lectures/14-statistical-learning-in-practice.qmd) |
+| 21 | [Applied Statistical Learning Case Studies](lectures/20-applied-statistical-learning-case-studies.qmd) |

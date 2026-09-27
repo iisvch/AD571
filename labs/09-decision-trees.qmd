@@ -1,0 +1,293 @@
+---
+title: "Lab 09: Decision Trees and Logistic Regression"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+# Support Packages
+
+```{r support, warning=FALSE,message=FALSE,include=TRUE}
+set.seed(16856)
+require(MASS)
+require(glmnet)
+library(kableExtra)
+library(stargazer)
+library(flextable)
+library(dplyr)
+library(leaps)
+library(caret)
+library(ggplot2)
+library(ggExtra)
+library(tidyr)
+library(ISLR2)
+library(ISLR)
+library(readr)
+library(reticulate)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("weights", "interactions", "cjoint", "plm", "interactions", "jtools", "stats", "miceadds", "broom", "RColorBrewer", "ggstatsplot", "ggpubr", "stargazer", "sandwich", "hrbrthemes", "rms", "interplot", "coefplot", "gmodels", "car", "lattice","foreign", "ggplot2", "MASS", "Hmisc", "reshape2", "oddsratio", "tidyr", "psych", "dplyr", "tidyverse", "cjoint")
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+```
+
+# Import the Causation and Prediction Datasets. 
+
+There are two data files. The `PredictionData` contains the fully imputed data ($7140 \times 286$) taken from *Hegre and Sambanis (2006)*. This first dataset was used to explore the predictive accuracy of random forests compared to logistic regression. Figures 1,2, and 4 were constructed from this data. The second data file, `CasualData` was used to explore causal mechanisms related to civil war onset. This is a smaller dataset ($7141 \times 53$) where only variables theorized to be most relevant to the onset of civil war were imputed.
+
+The following packages are needed for the assignment. The `doParallel` library provides parallelization for `for` loops. It allocates the job to **N** number of cores out of total cores resulting in faster execution. However, **This slows down the computer significantly, use with caution**.
+
+```{r imppackages, message=FALSE,warning=FALSE}
+library(randomForest) #for random forests
+library(caret) # for CV folds and data splitting
+library(ROCR) # for diagnostics and ROC plots/stats
+library(pROC) # same as ROCR
+library(stepPlr) # Firth;s logit implemented thru caret library
+library(doParallel) # for using multiple processor cores
+library(skimr)
+library(gt)
+library(corrplot)
+library(GGally)
+library(cvms)
+library(tibble)
+
+Prediction <- read.csv(file="data/PredData.csv") # data for prediction
+Causation <- read.csv(file="data/CauseData.csv") # data for causal mechanisms
+```
+
+# Perform Logistic Regression on the Causation Data
+
+
+## Data subsetting and transformations
+
+The data subset above is used in training the logistic regression model. Here we will need to use `as.factor` over the `warstds` variable to convert it to a categorical variable use `0=peace` and `1=war`. We will be evaluating performance of three models developed by *Fearon and Laitin (2003)*, *Collier and Hoeffler (2004)*, and *Hegre and Sambanis (2006)*.
+
+As causal comparison should be made when models are trained and tested over the similar datasets. **Design and Analysis** of these experiments will give you a good idea on how will you perform evaluation of different logistic regression models.
+
+```{r}
+###Converting DV into Factor with names for Caret Library###
+Causation$warstds<-factor(
+  Causation$warstds,
+  levels=c(0,1),
+  labels=c("peace", "war"))
+
+registerDoParallel(cores=5) # distributing workload over multiple cores for faster computaiton
+
+
+#This method of data slicing - or CV - will be used for all logit models - uncorrected and corrected
+tc<-trainControl(method="cv", 
+                 number=5,#creates CV folds - 10 for this data
+                 summaryFunction=twoClassSummary, # provides ROC summary stats in call to model
+                 classProb=T,savePredictions = TRUE,
+                  returnData = TRUE)
+```
+
+I will set my parallel execution to be 5 cores. Pleas be mind full of this on your own computer. In case you think there could be a problem in execution, use google collab notebook. Using train control method from past lab create a cross validated control. More details on parameters can be found [here](https://search.r-project.org/CRAN/refmans/caret/html/trainControl.html). Here are the parameters:
+
+-   In `trainControl()`, set:
+    -   `method` to `cv`,
+    -   `number` to `5`,
+    -   `summaryFunction` to `twoClassSummary`,
+    -   `classProb` to `TRUE`
+    -   `search` to `grid`
+    -   `returnData` to `TRUE`,
+    -   `savePredictions` to `TRUE`
+
+Using same training control we will now train *Collier and Hoeffler (2004)* model. Using `train()` command from `caret` package fit the *Collier and Hoeffler* model. This model fits `warstds` over `sxpnew`, `sxpsq`, `ln_gdpen`, `gdpgrowth`, `warhist`, `lmtnest`, `ef`, `popdense`, `lpopns`, `seceduc`, and . Note no **coldwar, ptime**.
+
+-   In `train()`, set:
+    -   model for above variables,
+    -   `metric` to `ROC`,
+    -   `method` to `glm`,
+    -   `family` to `binomial`
+    -   `trControl` to `tc`
+
+Since this is also a cross validated model you will not be able to directly extract the variables. To get the stargazer table follow the steps below:
+
+-   Assuming you have set the `objectname <- train()` to an r object.
+-   Now use `glm.fl.1 <- glm()` and fit the exact same model above with data= subset data and `family="binomial"`
+-   Use `objectname$finalmodel$call <- glm.fl.1$call`
+-   Use `stargazer(model.ch.1$finalModel......`
+
+```{r CollierHoeffler, results='asis'}
+model.ch.1<-train(as.factor(warstds)~sxpnew+sxpsq+ln_gdpen+gdpgrowth+warhist+lmtnest+ef+popdense+lpopns+seceduc, #CH 2004 model spec
+metric="ROC", method="glm", family="binomial",
+trControl=tc, data=Causation)
+
+glm.ch.1 <- glm(as.factor(warstds)~warhist+ln_gdpen+lpopns+lmtnest+ncontig+oil+nwstate
+             +inst3+pol4+ef+relfrac, data=Causation, family="binomial")
+model.ch.1$finalModel$call <- glm.ch.1$call
+```
+
+## Create the Confusion matrix for Collier and Hoeffler (2004) model
+
+Here is a complete function to create confusion matrix. This is not calibrated for the data above. You will need to modify and make it work.
+
+```{r chconf,}
+cm <- confusionMatrix(model.ch.1, norm="average")
+
+conftab <- tibble("target" = model.ch.1$pred$obs,
+                     "prediction" = model.ch.1$pred$pred)
+basic_table <- table(conftab)
+cfm <- as_tibble(basic_table)
+plot_confusion_matrix(cfm, 
+                      target_col = "target", 
+                      prediction_col = "prediction",
+                      counts_col = "n")
+```
+
+
+# Decision Tree
+
+## Fit the decision Tree
+
+```{r dt,}
+library(rpart)
+library(rpart.plot)
+# Step 1: Begin with a small cp. 
+
+tree <- rpart(as.factor(warstds)~sxpnew+sxpsq+ln_gdpen+gdpgrowth+warhist+lmtnest+ef+popdense
++lpopns+seceduc, data = Causation, control = rpart.control(cp = 0.0001))
+
+# Step 2: Pick the tree size that minimizes misclassification rate (i.e. prediction error).
+# Prediction error rate in training data = Root node error * rel error * 100%
+# Prediction error rate in cross-validation = Root node error * xerror * 100%
+# Hence we want the cp value (with a simpler tree) that minimizes the xerror. 
+
+kable(tree$cptable) %>%
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "center",)
+```
+
+### Create the Confusion matrix for Decision Tree Model
+
+**You know this by now.**
+
+### Plot the decision tree
+
+```{r pltDT,warning=FALSE,message=FALSE}
+library(party)
+library(rattle)
+fancyRpartPlot(tree)
+```
+
+## Prune the decision tree
+
+```{r prunDT,}
+# Step3: Prune the tree using the best cp.
+bestcp <- tree$cptable[which.min(tree$cptable[,"xerror"]),"CP"]
+tree.pruned <- prune(tree, cp = bestcp)
+```
+
+### Create the Confusion matrix for Decision Tree Model
+
+**You know this by now.**
+
+### Plot the decision tree
+
+```{r pltDTprun,warning=FALSE,message=FALSE}
+library(party)
+library(rattle)
+fancyRpartPlot(tree.pruned)
+```
+
+
+# Plot the ROC of all the above models
+
+you will need `ROCR` package. Also use `attach()` over the sub-dataset before working on following:
+
+1.  First predict the probabilities from the sub-dataset (91 variables) for
+2.  Logistic Regression
+3.  Decision Tree
+
+```{r predfunc1,warning=FALSE,message=FALSE}
+library(ROCR)
+attach(Prediction)
+myvars <- names(Prediction) %in% c("X", "country", "year", "atwards") 
+Prediction_Clean <- Prediction[!myvars]
+
+###Gathering info for ROC Plots: Uncorrected Logists###
+CH.1.pred<-predict(model.ch.1, Prediction_Clean, type="prob")
+DT.1.pred<-predict(tree, Prediction_Clean, type="prob")
+DT.2.pred<-predict(tree.pruned, Prediction_Clean, type="prob")
+```
+
+2.  Use the above model over Prediction Dataset (283 variables)
+3.  Use `predict()` over `war` variable from each of the predict function and `warstds` from the Prediction dataset for all 4 models.
+4.  Extract true positive rate `tpr`, and false positive rates, `fpr`, by using `performance()` function on 1.
+
+```{r predfunc2,}
+pred.CH <- prediction(CH.1.pred$war, Prediction_Clean$warstds)
+perf.CH <- performance(pred.CH,"tpr","fpr")
+pred.DT1<-prediction(DT.1.pred[,1], Prediction_Clean$warstds)
+perf.DT1<-performance(pred.DT1, "tpr", "fpr")
+pred.DT2<-prediction(DT.2.pred[,1], Prediction_Clean$warstds)
+perf.DT2<-performance(pred.DT2, "tpr", "fpr")
+```
+
+```{r plotpredfunc, fig.align='center', fig.width=7,fig.height=4.5}
+plot(perf.CH, main="Logistic Regression Vs Decision Tree",col= "#009ECE")
+plot(perf.DT1, add=T,col= "#FF9E00", lwd=1.5)
+plot(perf.DT2, add=T,col= "#F7D708", lwd=1.5)
+# plot(perf.RF.1, add=T,col= "#CE0000", lwd=1.5)
+legend(0.32, 0.25, c("Collier and Hoeffler (2004)",
+                     "Full Decision Tree", "Pruned Decision Tree"), col=c("#009ECE","#FF9E00","#F7D708"), bty="n", lwd=1.2,
+       cex = .75)
+```
+
+## Calculate the AUC for three models
+
+```{r auc calc}
+library(ROCR)
+# area under curve
+auc.CH <- performance(pred.CH, measure = "auc")
+auc.DT1<- performance(pred.DT1, measure = "auc")
+auc.DT2<- performance(pred.DT2, measure = "auc")
+```
+
+
+- Area under the curve for Logistic Regress is _____________________. `auc.CH@y.values[[1]]`
+- Area under the curve for Full Decision Tree is _____________________. `auc.DT1@y.values[[1]]`
+- Area under the curve for Pruned Decision Tree is _____________________. `auc.DT2@y.values[[1]]`
+
+
+# Python companion
+
+Decision trees create rule-based partitions of the feature space. Pruning controls tree complexity and reduces variance.
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.metrics import classification_report
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+
+df = pd.read_csv("data/lab09.csv")
+X = pd.get_dummies(df.drop(columns="y"), drop_first=True)
+y = df["y"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, stratify=y, random_state=571)
+
+base_tree = DecisionTreeClassifier(random_state=571)
+path = base_tree.cost_complexity_pruning_path(X_train, y_train)
+search = GridSearchCV(base_tree, param_grid={"ccp_alpha": path.ccp_alphas}, cv=10, scoring="accuracy")
+search.fit(X_train, y_train)
+
+best_tree = search.best_estimator_
+print("Best alpha:", search.best_params_["ccp_alpha"])
+print(classification_report(y_test, best_tree.predict(X_test)))
+
+plt.figure(figsize=(12, 7))
+plot_tree(best_tree, feature_names=X.columns, class_names=[str(c) for c in best_tree.classes_], filled=True, max_depth=3)
+plt.show()
+```
+
+

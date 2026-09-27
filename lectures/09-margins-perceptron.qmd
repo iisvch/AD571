@@ -1,0 +1,148 @@
+---
+title: "Margins and Perceptron"
+---
+
+This chapter prepares for support vector machines by focusing on the
+geometry of linear classification. The central object is a decision
+boundary: a line, plane, or hyperplane that separates predicted
+classes.
+
+## Learning Objectives
+
+- Describe a linear classifier as a separating hyperplane.
+- Explain the perceptron update rule.
+- Define functional and geometric margins.
+- Connect margins to robustness and support vector machines.
+- Compare perceptron learning with logistic regression and linear
+  margin-based classification.
+
+## Linear Decision Boundaries
+
+For labels $y_i \in \{-1,1\}$, a linear classifier predicts with
+
+$$
+\hat y_i = \operatorname{sign}(\beta_0 + x_i^\top\beta).
+$$
+
+The boundary is the set of points where
+
+$$
+\beta_0 + x^\top\beta = 0.
+$$
+
+In two dimensions this is a line; in three dimensions it is a plane; in
+more dimensions it is a hyperplane. The coefficients determine the
+orientation of the boundary, and the intercept shifts it.
+
+## Perceptron Learning
+
+The perceptron updates the boundary whenever it misclassifies an
+observation. Starting from initial weights $w$ and intercept $b$, the
+prediction is
+
+$$
+\hat y_i = \operatorname{sign}(w^\top x_i + b).
+$$
+
+If observation $i$ is misclassified, update
+
+$$
+w \leftarrow w + \eta y_i x_i,
+\qquad
+b \leftarrow b + \eta y_i,
+$$
+
+where $\eta$ is a learning rate. The update moves the boundary in a
+direction that makes the current observation more likely to be
+classified correctly.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+x1 <- rnorm(100)
+x2 <- rnorm(100)
+y <- ifelse(x1 + x2 + rnorm(100, sd = 0.5) > 0, 1, -1)
+plot(x1, x2, col = ifelse(y == 1, "steelblue", "firebrick"), pch = 19)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import matplotlib.pyplot as plt
+
+rng = np.random.default_rng(571)
+x1 = rng.normal(size=100)
+x2 = rng.normal(size=100)
+y = np.where(x1 + x2 + rng.normal(0, 0.5, 100) > 0, 1, -1)
+
+colors = np.where(y == 1, "steelblue", "firebrick")
+plt.scatter(x1, x2, c=colors)
+plt.xlabel("x1")
+plt.ylabel("x2")
+plt.show()
+```
+
+:::
+
+The perceptron is useful because it shows learning as geometry. It is
+not usually the final applied method in this course, but it motivates
+modern linear classifiers.
+
+## Margins
+
+The margin measures how far an observation is from the decision
+boundary. Points near the boundary are fragile: a small perturbation can
+change their predicted class. Points far from the boundary are more
+stable.
+
+The functional margin is
+
+$$
+y_i(\beta_0 + x_i^\top\beta).
+$$
+
+The geometric margin rescales by the coefficient norm:
+
+$$
+\frac{y_i(\beta_0 + x_i^\top\beta)}{\|\beta\|}.
+$$
+
+Maximizing the smallest geometric margin produces a classifier that
+separates the classes with the widest possible gap when perfect
+separation is available.
+
+## From Mistakes to Loss Functions
+
+The perceptron responds only to mistakes. Logistic regression minimizes
+log loss and estimates probabilities. Support vector machines minimize
+hinge loss, which penalizes points inside the margin even when they are
+correctly classified:
+
+$$
+\max\{0, 1 - y_i(\beta_0 + x_i^\top\beta)\}.
+$$
+
+This loss encourages a boundary that is not merely correct, but correct
+with margin.
+
+## Boundary Comparison
+
+A useful two-dimensional analysis compares three fitted boundaries:
+
+1. perceptron boundary from iterative updates,
+2. logistic regression boundary from probability modeling,
+3. margin-based boundary from a linear support vector classifier.
+
+The comparison should focus on the points closest to the boundary. Those
+points drive the distinction between a classifier that separates the
+data and a classifier that separates them robustly.

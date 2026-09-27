@@ -1,0 +1,86 @@
+---
+title: "Source Map"
+---
+
+This page is a maintainer-facing map of source material. It should help
+future imports without making the published course dependent on local
+folders.
+
+## Local Source Roots
+
+| Root | Use |
+|---|---|
+| `D:\Georgetown\ANLY 512\Lecture Notes` | Best source for older `.Rmd` lecture notes and rendered examples. |
+| `D:\Georgetown\ANLY 512\Labs` | Best source for applied exercises and lab handouts. |
+| `D:\Georgetown\ANLY 512\Lectures` | Best source for LaTeX presentations and slide figures. |
+| Retired `M1` folder | Merged into Chapter 4: data splitting, feature engineering, and interactions. |
+| Retired `M2` folder | Merged into Chapters 2 and 5: applied regression, diagnostics, prediction, and model selection. |
+| Retired `M3` folder | Merged into Chapters 3 and 14: resampling and simulation practice. |
+
+## High-Value Lecture Note Candidates
+
+| Source | Candidate destination |
+|---|---|
+| `Lecture 02.Rmd`, `LN01 - Regression Proofs and Supplementary Theorems.Rmd` | Lecture 2 |
+| `Lecture-04-Resampling-Methods.rmd`, `LN04-Resampling Methods.rmd` | Lecture 3 |
+| `Lecture 05 - Subset.Rmd` | Lecture 5 |
+| `LN05-PrincipalComponentsRegression.Rmd` variants | Lecture 6 |
+| `08-tradeoff.Rmd` | Lecture 7 |
+| `LN08R-LogisticRegression.Rmd`, `LN10R-DiscriminantAnalysis.Rmd` | Lecture 8 |
+| `LN09R-Perceptron.Rmd` | Lecture 9 |
+| `09-decision-trees.Rmd`, `LN11R-DecisionTrees.Rmd` | Lecture 10 |
+| `LN12R-EnsembleLearning.Rmd` | Lecture 11 |
+| `LN13-SupportVectorMachines.py`, Module 06 slides | Lecture 12 |
+
+## Lab Candidates
+
+| Lab folder | Candidate destination |
+|---|---|
+| `Lab 01` | Linear regression and OLS foundations |
+| `Lab 03` | Resampling |
+| `Lab 04` | Model selection |
+| `Lab 05` | Regularization and dimension reduction |
+| `Lab 06` | Nonlinear regression |
+| `Lab 08` | Discriminant analysis and multivariate visualization |
+| `Lab 09` | Trees |
+| `Lab 10` | Ensembles |
+| `Lab 11` | Support vector machines |
+| `Jupyter/Jupyter_Notebooks/Ch12-unsup-lab.ipynb` | Unsupervised learning |
+
+## Reference PDFs
+
+| Local file | Notes |
+|---|---|
+| `C:\Users\nakul\Downloads\gradient-notes.pdf` | Seven-page gradient notes; useful for perceptron, boosting, and optimization context. |
+| `C:\Users\nakul\Downloads\Sa4.pdf` | Metadata title is `s.dvi`; triage before assigning. |
+| `C:\Users\nakul\Downloads\FullNotes210BSpring2018.pdf` | 158 pages; triage topic coverage before mapping. |
+| `C:\Users\nakul\Downloads\all-of-statistics.pdf` | General statistical reference; do not redistribute unless license permits. |
+| `C:\Users\nakul\Downloads\FullNotes201AFall2022.pdf` | 131 pages; triage topic coverage before mapping. |
+| `C:\Users\nakul\Downloads\Kartik_Notes.pdf` | Game theory lecture notes by Navin Kartik; likely optional or contextual only. |
+| `C:\Users\nakul\Downloads\2605.29713v1.pdf` | Generative AI foundations primer; possible final lecture reference. |
+
+## Import Priority
+
+Start with the source files that already match the 14-lecture sequence:
+
+1. Regression and resampling notes.
+2. Model selection, regularization, and PCR notes.
+3. Classification notes.
+4. Trees, ensembles, and SVM notes.
+5. Labs after lecture text is stable.
+6. External PDFs only after licensing and topic fit are checked.
+
+## Retired Local Drafts
+
+The earlier `M1`, `M2`, and `M3` directories were consolidated into the
+book chapters and removed from the active project structure. Their
+useful material was mapped as follows:
+
+| Retired file | Merged destination |
+|---|---|
+| `M1/M1LN1.qmd` | Chapter 4: partitioning and feature engineering |
+| `M1/M1LN2.qmd` | Chapter 4: interactions as feature construction |
+| `M2/M2LN1.qmd` | Chapter 2: Ames regression workflow; Chapter 5: model selection |
+| `M2/M2LN2.qmd` | Chapter 2: diagnostics and prediction; Chapter 5: model comparison |
+| `M3/M3LN1.qmd` | Chapter 3: cross-validation and bootstrap |
+| `M3/M3LN2.qmd` | Chapter 14: Monte Carlo simulation as applied practice |

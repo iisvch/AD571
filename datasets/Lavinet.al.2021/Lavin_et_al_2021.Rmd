@@ -1,0 +1,492 @@
+---
+title: "Minimum size limits and the reproductive value of numerous, young, mature female fish"
+author: "Charles P. Lavin, Geoffrey P. Jones, David H. Williamson, Hugo B. Harrison"
+date: "29/10/2020"
+output: html_document
+---
+
+# Load packages
+```{r message = FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggpubr)
+#library(grid)
+#library(ggplotify)
+#library(ggord)
+library(fitdistrplus)
+library(MASS)
+library(car)
+library(KScorrect)
+library(EnvStats)
+select <- dplyr::select
+summarise <- dplyr::summarise
+
+#fonts for figures
+#library(extrafont)
+#font_import()
+```
+
+#A. DATA INPUT
+##1. Data: Sampled adults used for parentage analysis
+```{r}
+samp <- read.csv("Adults_used_for_parentage_in_each_period.csv", header = T)
+
+samp.1 = samp %>% filter(! is.na(TL)) %>%
+  distinct(ID, .keep_all = T) %>%  #remove duplicate IDs
+  mutate(TL = TL / 10)  #Convert to 'cm'
+
+samp.TL = samp.1[,9:10]
+
+#number of NYMFFs sampled
+samp.NYM = samp.TL %>% filter(TL>=25 & TL<=38)
+
+#above MSL fish sampled
+samp.MSL = samp.TL %>% filter(TL>38)
+
+
+#average size at sample
+samp.1 %>% summarise(mean = mean(TL), se = sd(TL)/ sqrt(n()))
+summary(samp.1$TL)
+
+#location (reef) of samples
+parent.loc <- samp.1 %>% dplyr::select(ID, REEF) %>% rename(Parent = ID)
+
+```
+
+
+##2. Data: Parentage assignments 
+```{r}
+parent_size.raw = read.csv("Total_parent_offspring_assignments.csv", header=TRUE)
+
+##Step-wise size re-calculation from assigned parent's sampling FL (mm) to spawning TL (cm)
+parent_size = parent_size.raw %>%
+#Calculating parent's sample TL (cm) from sample FL (mm), using  equation from Harrison et al. 2012 and Williamson et al. 2016
+  mutate(Parent_sample_TL_cm = ((Parent_sample_FL_mm*0.1)-0.24069)/0.9375) %>%
+#Calculating parent's sample SL (cm) from sample FL (mm), using Equation 1, from Ferreira & Russ (1992)
+  mutate(SL_cm_sampling_parent = -0.4236+0.8565*Parent_sample_FL_mm*0.1) %>%
+#Calculating parent's age from sample SL (cm), using Equation 2, from Ferreira & Russ (1992)
+  mutate(Parent_sampling_age = (log(-SL_cm_sampling_parent/60+1)/-0.206)-0.945) %>%
+#converting parent sample / juvenile spawning date to DMY format (lubridate)
+  mutate(sample_date = dmy(Parent_sample_date),
+          spawn_date = dmy(Juvenile_spawn_date)) %>%
+#calculating the difference in time from parent sampling to juvenile spawning, in years
+  mutate(Date_diff_years = (sample_date-spawn_date)/365) %>%
+#calculating parent's age at spawning, by adding/subtracting time difference from parent's sampling age
+  mutate(Parent_spawning_age = as.numeric(Parent_sampling_age - Date_diff_years)) %>%
+#calculating parent's SL (cm) at time of spawning from spawning age, using Equation 3, from Ferreira & Russ (1992) 
+  mutate(Parent_spawning_SL_cm = (60*(1-exp(-0.206*(Parent_spawning_age+0.945))))) %>%
+#converting parent's SL (cm) at time of spawning to FL (cm) at time of spawning, using the inverse of Equation 1 from Ferreira & Russ (1992)
+  mutate(Parent_spawning_FL_cm = (Parent_spawning_SL_cm+0.4236)/0.8565) %>%
+#converting parent's FL (cm) at time of spawning to TL (cm) at time of spawning, using equation Eq. 4 from Harrison et al. 2012 and Williamson et al. 2016
+  mutate(Parent_spawning_TL_cm = (Parent_spawning_FL_cm-0.24069)/0.9375) %>% 
+#getting rid of 11 NAs, 3 non-computable values
+  drop_na(Parent_spawning_TL_cm) %>%
+  filter(Parent_spawning_TL_cm>25) %>%
+  left_join(parent.loc, by = "Parent")
+
+parent_size %>% group_by(REEF, Sample_group) %>% summarise(n = n()) %>% spread(key = Sample_group, value = n)
+parent_size %>% summarise(mean = mean(Parent_spawning_TL_cm), se = sd(Parent_spawning_TL_cm)/ sqrt(n()))
+
+summary(parent_size$Parent_spawning_TL_cm)
+
+# number of NYMFFs assigned to offspring
+parent_size %>% filter(Parent_spawning_TL_cm <= 38)
+
+```
+
+
+##3. Data: Surveyed population (UVC)
+##a. size distribution
+```{r}
+gki.abundance = read.csv(file = "Great_Keppel_Island_Coral_Trout_Abundance_data.csv") 
+
+#focal NTMRs
+ntmr = gki.abundance %>% dplyr::select(- FORK.LENGTH) %>%
+  uncount(ABUNDANCE) %>% filter(YEAR %in% seq(2007,2013,1), ZONE == "NTR", SITE %in% c("GK5", "GK6", "M1", "M2", "M3", "M4", "H1", "H2"))
+
+#Green zones (NTMRs)
+green = gki.abundance %>% dplyr::select(- FORK.LENGTH) %>%
+  uncount(ABUNDANCE) %>% filter(YEAR %in% seq(2007,2013,1), ZONE == "NTR")
+
+#for fit.distribution.gamma
+final_survey = green %>% filter(TOTAL.LENGTH >= 25) %>% pull(TOTAL.LENGTH) 
+source("fit.distribution.gamma.R")
+
+green.zones <- fit.distribution.gamma(green %>% pull(TOTAL.LENGTH), boot = 99, range = seq(0,80, by = 0.1))
+
+ntmr.zones <- fit.distribution.gamma(ntmr %>% pull(TOTAL.LENGTH), boot = 99, range = seq(0,80, by = 0.1))
+
+
+#Blue zones (fished)
+blue = gki.abundance %>% dplyr::select(- FORK.LENGTH) %>%
+  uncount(ABUNDANCE) %>% filter(YEAR %in% seq(2007,2013,1), ZONE == "FISHED")
+blue.zones <- fit.distribution.gamma(blue %>% pull(TOTAL.LENGTH), boot = 99, range = seq(0,80, by = 0.1))
+
+```
+
+##b. Defining NYMFFs
+
+## For the purpose of this study we explicitly define NYFFs as fish 25 cm-38 cm TL (below MSL), of coral trout observed in unfished populations (NTMRs) in the Keppel Islands between 2007 and 2013.
+
+## number of NYMFF vs number of above-MSL from UVC
+```{r}
+ntmr.NYMF = ntmr %>% filter(TOTAL.LENGTH >= 25 & TOTAL.LENGTH <= 38) #369
+ntmr.BOF = ntmr %>% filter(TOTAL.LENGTH > 38) # 474 individuals above MSL
+
+369/(369+474)
+474/(369+474)
+
+#100 indiv. less < 25 cm TL
+```
+
+##C. Density and biomass
+```{r}
+gki.density = gki.abundance %>% 
+  filter(YEAR %in% seq(2007,2013,1)) %>%
+  group_by(REGION, YEAR, REEF, SITE, ZONE) %>%
+  summarise(total.fish = sum(ABUNDANCE) / 1500 *10000) %>%    #divide by 5 for the average per transect; (divide by 1500 for per square metre reef, optional); divide by 1500 * 10000 for ha; transect are 50m * 6m belt transects
+  group_by(REGION, YEAR, REEF, SITE, ZONE) %>%
+  summarise(mean = mean(total.fish, na.rm = T),
+            se = sd(total.fish, na.rm = T)/sqrt(n())) %>%
+  mutate(variable = "density")
+
+
+gki.biomass <- gki.abundance %>% 
+  filter(YEAR %in% seq(2007,2013,1)) %>%
+  mutate(biomass = (0.0118 * FORK.LENGTH^3.06) * ABUNDANCE) %>%
+  group_by(REGION, YEAR, REEF, SITE, ZONE, N.TRANSECT) %>%
+  summarise(total.biomass = sum(biomass) / 1500 *10000 / 1000) %>%
+  group_by(REGION, YEAR, REEF, SITE, ZONE) %>%
+  summarise(mean = mean(total.biomass, na.rm = T) ,
+            se = sd(total.biomass, na.rm = T)/ sqrt(n()) ) %>%
+  mutate(variable = "biomass")
+
+plot.density =  ggplot(gki.density, aes(x = ZONE, y = mean, fill = ZONE) ) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("skyblue", "lightgreen")) +
+  labs(y = expression(Density ~ (individuals.ha^{-2}~.ya^{-1})), x = "") +
+  theme_classic() +
+  theme(legend.position = "none")
+plot.biomass =  ggplot(gki.biomass, aes(x = ZONE, y = mean, fill = ZONE) ) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("skyblue", "lightgreen")) +
+  labs(y = expression(Biomass ~ (kg.ha^{-2}~.ya^{-1})), x = "") +
+  theme_classic() +
+  theme(legend.position = "none")
+ggarrange(plot.density, plot.biomass)
+```
+
+```{r}
+t.test(mean ~ ZONE, data = gki.biomass )
+
+t.test(mean ~ ZONE, data = gki.density )
+```
+## The alternative hypothesis is that the density and biomass of coral trout in blue zones is less than in green zones.
+
+#B. FIT DISTRIBUTIONS
+##Testing to determine distribution of assigned, sampled and surveyed data, Gamma, Weibull, lnorm, normal 
+```{r}
+final_sample = samp.1$TL
+final_assign = parent_size$Parent_spawning_TL_cm
+final_survey = green %>% filter(TOTAL.LENGTH >= 25) %>% pull(TOTAL.LENGTH) 
+
+#gamma
+fit_g = fitdist(final_assign, "gamma")
+fit_gs = fitdist(final_sample, "gamma")
+fit_gsu = fitdist(final_survey, "gamma")
+
+#weibull
+fit_w = fitdist(final_assign, "weibull")
+fit_ws = fitdist(final_sample, "weibull")
+fit_wsu = fitdist(final_survey, "weibull")
+
+#lognorm
+fit_ln = fitdist(final_assign, "lnorm")
+fit_lns = fitdist(final_sample, "lnorm")
+fit_lnu = fitdist(final_survey, "lnorm")
+
+#normal dist
+fit_norm = fitdist(final_assign, "norm")
+fit_norms = fitdist(final_sample, "norm")
+fit_normsu = fitdist(final_survey, "norm")
+
+#dens plot results, assign
+par(mfrow=c(2,2))
+plot.legend <- c("Weibull", "lognormal", "gamma", "Norm")
+denscomp(list(fit_w, fit_g, fit_ln, fit_norm), legendtext = plot.legend)
+cdfcomp (list(fit_w, fit_g, fit_ln, fit_norm), legendtext = plot.legend)
+qqcomp  (list(fit_w, fit_g, fit_ln, fit_norm), legendtext = plot.legend)
+ppcomp  (list(fit_w, fit_g, fit_ln, fit_norm), legendtext = plot.legend)
+
+par(mfrow=c(1,1))
+
+#dens plot results, sample
+par(mfrow=c(2,2))
+plot.legend <- c("Weibull", "lognormal", "gamma", "Norm")
+denscomp(list(fit_ws, fit_gs, fit_lns, fit_norms), legendtext = plot.legend)
+cdfcomp (list(fit_ws, fit_gs, fit_lns, fit_norms), legendtext = plot.legend)
+qqcomp  (list(fit_ws, fit_gs, fit_lns, fit_norms), legendtext = plot.legend)
+ppcomp  (list(fit_ws, fit_gs, fit_lns, fit_norms), legendtext = plot.legend)
+
+par(mfrow=c(1,1))
+
+#dens plot results, survey
+par(mfrow=c(2,2))
+plot.legend <- c("Weibull", "lognormal", "gamma", "Norm")
+denscomp(list(fit_wsu, fit_gsu, fit_lnu, fit_normsu), legendtext = plot.legend)
+cdfcomp (list(fit_wsu, fit_gsu, fit_lnu, fit_normsu), legendtext = plot.legend)
+qqcomp  (list(fit_wsu, fit_gsu, fit_lnu, fit_normsu), legendtext = plot.legend)
+ppcomp  (list(fit_wsu, fit_gsu, fit_lnu, fit_normsu), legendtext = plot.legend)
+
+par(mfrow=c(1,1))
+```
+
+## GoF
+```{r}
+#cullen-frey graphs
+descdist(final_assign, discrete=FALSE, boot=999)
+descdist(final_sample, discrete=FALSE, boot=999)
+descdist(final_survey, discrete=FALSE, boot=999)
+
+#GOF
+gofstat(list(fit_g,fit_w,fit_ln, fit_norm))
+gofstat(list(fit_gs,fit_ws,fit_lns, fit_norms))
+gofstat(list(fit_wsu, fit_gsu, fit_lnu, fit_normsu))
+
+gofTest(final_assign, test = "proucl.ks.gamma", distribution = "gamma")
+
+gofTest(final_sample, test = "proucl.ks.gamma", distribution = "gamma")
+
+gofTest(final_survey, test = "proucl.ks.gamma", distribution = "gamma")
+```
+
+
+##Gamma distributions
+```{r}
+#assign
+final_assign = parent_size$Parent_spawning_TL_cm
+assign.gamma = fit.distribution.gamma(final_assign, boot = 999, range = seq(25,80, by = 0.1))
+#sample
+final_sample = samp.1$TL
+sample.gamma = fit.distribution.gamma(final_sample, boot = 999, range = seq(25,80, by = 0.1))
+#survey
+final_survey = ntmr %>% filter(TOTAL.LENGTH >= 25) %>% pull(TOTAL.LENGTH) 
+survey.gamma = fit.distribution.gamma(final_survey, boot = 999, range = seq(25,80, by = 0.1))
+```
+
+
+
+#C. PLOT DISTRIBUTIONS
+##Fig 2a - distributions
+```{r}
+Fig.2.models = left_join(sample.gamma[[1]] %>% rename(sample = value), assign.gamma[[1]] %>% rename(assign = value), by = c("key", "range", "quantile")) %>%
+  #Standardise for sample size:
+  mutate(sample = sample * 872,      #Adults sampled
+       assign = assign * 111) %>%    #Assigned adults 
+  gather(key = variable, value = value, -c(key, range, quantile)) %>%
+  spread(key = quantile, value = value)
+
+Fig.2.values = Fig.2.models %>%
+  mutate(lower = `2.5%`*150/30) %>%
+  mutate(mid = `50%`*150/30) %>%
+  mutate(upper = `97.5%`*150/30)
+
+Fig2a =  ggplot() + 
+  geom_histogram(data=samp.TL, aes(x=TL), binwidth = 5, boundary=5, col = "black", fill = "grey66", alpha = .3) +
+  geom_histogram(data=parent_size, aes(x=Parent_spawning_TL_cm), binwidth = 5, boundary=5, col = "black", fill = "grey30", alpha = .3) +
+  geom_line(data=Fig.2.values, aes(x = range, y = mid, col = variable), size = .9) +
+  geom_ribbon(data=Fig.2.values, aes(x = range, ymin = lower, ymax = upper, fill = variable), alpha = 0.5) +
+  scale_x_continuous(breaks = seq(25,80,5), limits=c(25,80)) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_color_manual(values = c("grey30", "grey66"), labels = c("Assigned parents", "Sampled adults")) +
+  scale_fill_manual(values = c("grey20", "grey78"), labels = c("Assigned parents", "Sampled adults")) +
+  labs(y=expression(Probability~density %+-% `95%CI`~of~italic("P.maculatus")), x="Total length (cm)") + 
+  theme_classic() + 
+  theme(legend.position = c(.8,.8), legend.title = element_blank(), legend.text = element_text(size=17)) +
+  theme(axis.title.y = element_text(size=22)) +
+  theme(axis.text.y = element_text(size=22)) +
+  theme(axis.title.x = element_text(size=22)) +
+  theme(axis.text.x = element_text(size=22)) +
+  theme(text = element_text(family = "Times New Roman"))
+
+Fig2a
+
+```
+
+```{r}
+all.models = left_join(sample.gamma[[1]] %>% rename(sample = value), survey.gamma[[1]] %>% rename(survey = value), by = c("key", "range", "quantile")) %>%
+  left_join(assign.gamma[[1]] %>% rename(assign = value), by = c("key", "range", "quantile")) %>%
+  #Standardise for sample size:
+  mutate(survey = survey * 4051,     #Estimated population size in focal green zones
+       #survey.std = survey.std * 4051 / mean(survey.size$n), 
+       sample = sample * 872,      #Adults sampled
+       assign = assign * 111) %>%    #Assigned adults 
+  gather(key = variable, value = value, -c(key, range, quantile)) %>%
+  spread(key = quantile, value = value)
+```
+
+#D. What's the likelihood of contributing to local recruitment? 
+```{r}
+R.success = all.models %>% dplyr::select(-distribution) %>% gather(key = quantile, value = value, -c(key, range, variable)) %>% 
+  spread(key = variable, value = value) %>% 
+  mutate(ratio = assign / sample,
+         prop = sample / survey) %>%
+  mutate(prop = if_else(prop > 1, 1, prop)) %>%
+  mutate(corrected.ratio = assign / (1 - (1 - prop)^2)) 
+
+R.success.ratio = R.success %>% dplyr::select(range, quantile, ratio) %>%
+  spread(key = quantile, value = ratio)
+
+R = ggplot(R.success.ratio, aes(x = range, y = `50%`)) +
+  geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), fill = "deepskyblue1", alpha = .25) +
+  geom_line(col = "deepskyblue3") +
+  geom_segment(aes(x = 38, y = 0, xend = 38, yend = R.success.ratio %>% filter(range == 38.0 ) %>% pull(`50%`)), lty = "dotted", col = "black") +
+  scale_x_continuous(expand= c(0,0), breaks = c(25, 38, 50, 60, 70, 80)) +
+  scale_y_continuous(expand= c(0,0)) +
+  labs(y=expression(Likelihood~of~reproductive~success %+-% `95%CI`), x="Total length (cm)") +
+  theme_classic() +
+  theme(axis.title.y = element_text(size=22)) +
+  theme(axis.text.y = element_text(size=22)) +
+  theme(axis.title.x = element_text(size=22)) +
+  theme(axis.text.x = element_text(size=22)) +
+  theme(plot.margin = margin(1, 1, 1, 1,"cm")) +
+  theme(text = element_text(family = "Times New Roman")) +
+  coord_cartesian(clip = "off")
+
+R
+```
+
+## Figure 2
+```{r}
+Fig2 = ggarrange(Fig2a, R, labels = c("(a)", "(b)"), align = "h", nrow = 1, ncol=2, font.label=list(size = 22, face = "italic", family = "Times New Roman"))
+
+Fig2
+```
+
+## Calculating the likely reproductive success of above MSL-sized fish (>38 cm TL) versus fish below the MSL (<=38)
+```{r}
+bind_rows(
+  R.success.ratio %>% filter(range <= 38 ) %>% mutate(c025 = cumsum(`2.5%`), c500 = cumsum(`50%`), c975 = cumsum(`97.5%`)) %>%
+  filter(range == 38) %>% dplyr::select(range, c025, c500, c975),
+  
+  R.success.ratio %>% filter(range > 38) %>% mutate(c025 = cumsum(`2.5%`), c500 = cumsum(`50%`), c975 = cumsum(`97.5%`)) %>%
+  filter(range == 80) %>% dplyr::select(range, c025, c500, c975)) %>%
+  
+  gather(key = key, value = value, -range) %>% spread(key = range, value = value) %>% 
+  rename(NYMFs = `38`, BOFFFs = `80`) %>% 
+  mutate(r = BOFFFs / NYMFs )
+
+```
+## From this relationship, we estimate the likely reproductive success of fish above the MSL (38 cm TL) is 5.4 times greater than that of NYMFs (95% CI [4.6, 6.8]).
+
+```{r}
+c.ratio = R.success %>% dplyr::select(range, quantile, corrected.ratio) %>%
+  spread(key = quantile, value = corrected.ratio)
+
+R.contributions = ggplot(c.ratio, aes(x = range, y = `50%`)) +
+  geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), fill="deepskyblue1", alpha = .25) +
+  geom_line(col="deepskyblue3") +
+  geom_segment(aes(x = 38, y = 0, xend = 38, yend = c.ratio %>% filter(range == 38.0) %>% pull(`50%`)), lty = "dotted") +
+  scale_x_continuous(expand= c(0,0), breaks = c(25, 38, 50, 60, 70, 80)) +
+  scale_y_continuous(expand= c(0,0)) +
+  labs(y=expression(Local~replenishment~contribution %+-% `95%CI`), x= "Total length (cm)") +
+  theme_classic() +
+  theme(axis.title.y = element_text(size=22)) +
+  theme(axis.text.y = element_text(size=22)) +
+  theme(axis.title.x = element_text(size=22)) +
+  theme(axis.text.x = element_text(size=22)) +
+  theme(text = element_text(family = "Times New Roman")) +
+  theme(plot.margin = margin(1, 1, 1, 1,"cm")) +
+  coord_cartesian(clip = "off")
+
+R.contributions
+```
+
+## Calculating the length that displays the highest replenishment contribution
+```{r}
+c.ratio %>% filter(`2.5%` == max(`2.5%`))
+c.ratio %>% filter(`50%` == max(`50%`))
+c.ratio %>% filter(`97.5%` == max(`97.5%`))
+```
+## peak 39.1 (95% CI [36.9, 41])
+
+
+## Contribution of NYMFFs to local replenishment
+```{r}
+c.ratio %>%  mutate(c025 = cumsum(`2.5%`) / sum(`2.5%`), c500 = cumsum(`50%`) / sum(`50%`), c975 = cumsum(`97.5%`) / sum(`97.5%`)) %>% filter(range == 38)
+```
+## NYMFs contribute 36% 95 CI [31,40] of juvenile fish that recruited to the island group
+
+## Contributions of above-MSL fish equal to that of sub-MSL fish
+```{r}
+c.ratio %>%  mutate(c025 = cumsum(`2.5%`) / sum(`2.5%`), c500 = cumsum(`50%`) / sum(`50%`), c975 = cumsum(`97.5%`) / sum(`97.5%`)) %>% filter(range == 38 | range == 49)
+```
+
+## Figure 3
+```{r}
+ntmr.plot = ggplot(ntmr.zones[[1]] %>% spread(key = quantile, value = value), 
+                    aes(y = `50%`, x = range)) +
+    geom_histogram(data = data.frame(x = ntmr$TOTAL.LENGTH), aes(x = x, y=..density..), binwidth=5, boundary=5, colour="black", fill="grey66", alpha = .3) + 
+    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), fill = "grey78", alpha = .5) +
+    geom_line(col = "grey66") +
+    scale_y_continuous(expand = c(0,0)) +
+    scale_x_continuous(breaks = seq(0,80,5),limits=c(0,80), labels=c("0", "", "10", "", "20", "", "30", "", "40", "", "50", "", "60", "", "70", "", "80")) +
+    labs(y=expression(Probability~density %+-% `95%CI`), x="Total length (cm)") + 
+    theme_classic() +
+    theme(axis.title.y = element_text(size=22)) +
+    theme(axis.text.y = element_text(size=22)) +
+    theme(axis.title.x = element_text(size=22)) +
+    theme(axis.text.x = element_text(size=22)) +
+    theme(text = element_text(family = "Times New Roman"))
+
+ntmr.plot
+
+Fig3 = ggarrange(ntmr.plot, R.contributions, labels = c("(a)", "(b)"), align = "h", nrow=1, ncol = 2, widths = c(1,1.2), font.label=list(size = 22, face = "italic", family = "Times New Roman"))
+
+Fig3
+```
+
+# Supplementary Figure
+
+## S1
+```{r}
+FigS1 =  ggplot(parent_size %>% dplyr::select(REEF, Parent_sample_TL_cm, Parent_spawning_TL_cm) %>%
+  gather(key = key, value = value, -REEF), aes(x = value, fill = key)) +
+  geom_histogram(position = "dodge", binwidth = 5, boundary=5) + 
+  scale_x_continuous(breaks = seq(25,80,5), limits=c(25,80)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(y = expression(`#`~italic("P. maculatus")), x = "Total Length (cm)") +
+  scale_fill_manual(values = c("grey78", "grey28"), labels=c("Length at sampling", "Length at spawning")) +
+  theme_classic() + theme(legend.position = c(.9,.94), legend.title = element_blank()) +
+  theme(text = element_text(family = "Times New Roman")) +
+  theme(legend.text = element_text(size=17)) +
+  theme(axis.title.y = element_text(size=22)) +
+  theme(axis.text.y = element_text(size=26)) +
+  theme(axis.title.x = element_text(size=24)) +
+  theme(axis.text.x = element_text(size=22))
+
+FigS1
+```
+
+## S2
+```{r}
+Figure_S2=ggarrange(sample.gamma[[3]] + labs(title = "Sampled adults", font.label=list(size = 22, family = "Times New Roman")) + scale_x_continuous(breaks = seq(25,80,5), limits=c(25,80)) +
+  scale_y_continuous(expand = c(0,0)) +
+  theme(text = element_text(family = "Times New Roman")) +
+  theme(axis.title.y = element_text(size=22)) +
+  theme(axis.text.y = element_text(size=22)) +
+  theme(axis.title.x = element_text(size=22)) +
+  theme(axis.text.x = element_text(size=18)),
+          assign.gamma[[3]] + labs(title = "Assigned parents", font.label=list(size = 22, family = "Times New Roman")) + scale_x_continuous(breaks = seq(25,80,5), limits=c(25,80)) +
+  scale_y_continuous(expand = c(0,0)) +
+  theme(text = element_text(family = "Times New Roman")) +
+  theme(axis.title.y = element_text(size=22)) +
+  theme(axis.text.y = element_text(size=22)) +
+  theme(axis.title.x = element_text(size=22)) +
+  theme(axis.text.x = element_text(size=18)) + 
+    rremove("y.title"),
+          labels = c("(a)", "(b)"), align = "h", nrow = 1, ncol = 2, font.label=list(size = 20, face = "italic", family = "Times New Roman"))
+
+Figure_S2
+```
+

@@ -1,0 +1,132 @@
+---
+title: "Applied Statistical Learning Case Studies"
+---
+
+Applied statistical learning often combines many course tools in one
+analysis: exploratory summaries, transformations, probability models,
+simulation, model comparison, and careful communication. This chapter
+uses scientific and policy-style examples to show how the pieces fit
+together.
+
+## Learning Objectives
+
+- Translate a scientific or policy question into a modeling workflow.
+- Combine distribution fitting, regression, and uncertainty summaries.
+- Explain how simulation supports decision-making.
+- Report results without overstating causal or predictive claims.
+- Identify where model assumptions matter for a final recommendation.
+
+## Size Limits and Reproductive Contribution
+
+A fishery management question might ask whether smaller mature fish
+contribute meaningfully to local replenishment, even when policy rules
+focus on larger fish. The statistical workflow is not a single model.
+It includes data cleaning, length conversion, distribution summaries,
+assignment probabilities, and uncertainty.
+
+Key modeling tasks include:
+
+1. define the population and sampling frame,
+2. convert measurements onto a common length scale,
+3. compare size distributions across management zones,
+4. estimate reproductive contribution by size class,
+5. summarize uncertainty with confidence intervals or simulation,
+6. translate the result into a policy-relevant statement.
+
+## Distribution-Fitting Frame
+
+Distribution fitting is useful when the goal is to describe a size,
+waiting-time, abundance, or loss distribution.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+fish <- data.frame(
+  length_cm = rgamma(500, shape = 9, scale = 4.2),
+  zone = sample(c("fished", "reserve"), 500, replace = TRUE)
+)
+
+by(fish$length_cm, fish$zone, summary)
+fit_gamma <- MASS::fitdistr(fish$length_cm, densfun = "gamma")
+fit_gamma
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+rng = np.random.default_rng(571)
+fish = pd.DataFrame({
+    "length_cm": rng.gamma(shape=9, scale=4.2, size=500),
+    "zone": rng.choice(["fished", "reserve"], size=500)
+})
+
+print(fish.groupby("zone")["length_cm"].describe())
+shape, loc, scale = stats.gamma.fit(fish["length_cm"], floc=0)
+print({"shape": shape, "scale": scale})
+```
+
+:::
+
+The fitted distribution should be checked against the observed data.
+Goodness-of-fit summaries are evidence, not guarantees.
+
+## Simulation for Decision Support
+
+Simulation can propagate uncertainty from biological or operational
+inputs into a policy-relevant quantity.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+simulate_contribution <- function(n, mean_small, mean_large) {
+  small <- rgamma(n, shape = 25, rate = 25 / mean_small)
+  large <- rgamma(n, shape = 25, rate = 25 / mean_large)
+  small / (small + large)
+}
+
+share_small <- simulate_contribution(10000, mean_small = 36, mean_large = 64)
+quantile(share_small, c(0.05, 0.5, 0.95))
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+
+def simulate_contribution(n, mean_small, mean_large, seed=571):
+    rng = np.random.default_rng(seed)
+    small = rng.gamma(shape=25, scale=mean_small / 25, size=n)
+    large = rng.gamma(shape=25, scale=mean_large / 25, size=n)
+    return small / (small + large)
+
+share_small = simulate_contribution(10000, mean_small=36, mean_large=64)
+print(np.quantile(share_small, [0.05, 0.5, 0.95]))
+```
+
+:::
+
+The simulation does not settle the policy question by itself. It makes
+the consequences of assumptions visible and gives the analyst a way to
+describe uncertainty in the decision quantity.

@@ -1,0 +1,51 @@
+---
+title: "Course Blueprint"
+---
+
+This blueprint describes the reusable course architecture behind the
+lecture notes.
+
+## Audience
+
+The notes assume students have seen introductory probability,
+statistics, and basic programming. The course should be usable by data
+science, analytics, public policy, business analytics, and applied
+statistics audiences without relying on institution-specific framing.
+
+## Pedagogical Spine
+
+Each lecture should answer five questions:
+
+1. What problem are we trying to solve?
+2. What statistical object or loss function defines the method?
+3. What assumptions make the method work?
+4. How do we estimate, tune, and validate it?
+5. How should a careful analyst communicate the result?
+
+## Standard Lecture Structure
+
+Use the same pattern across the course:
+
+- setup and motivation,
+- notation and core model,
+- worked example,
+- common failure modes,
+- applied lab bridge,
+- reading and practice.
+
+## Assessment Rhythm
+
+The course can support weekly short labs and a final modeling project.
+Labs should emphasize reproducible workflow and interpretation rather
+than only code completion.
+
+## University-Agnostic Rewrite Rules
+
+- Replace course numbers, campus references, and term-specific dates
+  with neutral language.
+- Use "students" or "analysts" instead of institution-specific cohorts.
+- Keep local paths only in maintainer notes.
+- Prefer open or self-contained examples when possible.
+- Mark any external copyrighted PDF or textbook-derived figure as a
+  reference, not a redistributable asset.
+

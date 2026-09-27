@@ -1,0 +1,199 @@
+---
+title: "Data Splitting and Feature Engineering"
+---
+
+Statistical learning depends on disciplined data handling. A model can
+look strong simply because information from the test data leaked into
+preprocessing, feature construction, or tuning. This chapter focuses on
+building model-ready data without contaminating the evidence used for
+evaluation.
+
+## Learning Objectives
+
+- Create training, validation, and test partitions.
+- Explain why preprocessing must be estimated inside the training data.
+- Encode categorical variables and transform skewed predictors.
+- Construct interactions and nonlinear features deliberately.
+- Recognize leakage in common modeling workflows.
+
+## Splitting Comes First
+
+A split creates a contract. The training data are used to estimate
+preprocessing steps, fit models, and tune candidate choices. The test
+data are held back for final evaluation.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(rsample)
+library(AmesHousing)
+library(modeldata)
+
+# To get the processed version:
+ames <- make_ames()
+
+set.seed(571)
+ames_split <- initial_split(ames, prop = 0.8, strata = Sale_Price)
+ames_train <- training(ames_split)
+ames_test <- testing(ames_split)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.model_selection import train_test_split
+
+ames_train, ames_test = train_test_split(
+    ames,
+    train_size=0.8,
+    random_state=571
+)
+```
+
+:::
+
+Stratification keeps the response distribution roughly comparable
+across partitions. This is useful when the response is skewed or when a
+class outcome is imbalanced.
+
+## Leakage
+
+Leakage occurs when information unavailable at prediction time enters
+the model-building process. Common examples include:
+
+| Step | Leakage risk |
+|---|---|
+| Scaling before splitting | Test-set means and standard deviations influence training data |
+| Imputing before splitting | Test-set missingness affects imputation values |
+| Selecting predictors before splitting | Test-set associations influence the model space |
+| Tuning on the test set | Final evaluation becomes part of model selection |
+| Using future variables | Predictors contain information not known at decision time |
+
+The anti-leakage rule is simple: learn preprocessing from the training
+data, then apply the learned transformation to validation, test, and
+future data.
+
+## Ames Housing Workflow
+
+For Ames housing, `Sale_Price` is the target and many predictors are
+categorical, skewed, sparse, or missing. A reproducible feature
+workflow should handle all of these in a fixed order.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(recipes)
+
+ames_recipe <-
+  recipe(Sale_Price ~ ., data = ames_train) |>
+  step_log(Sale_Price, base = 10, skip = TRUE) |>
+  step_other(all_nominal_predictors(), threshold = 0.01) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_zv(all_predictors()) |>
+  step_normalize(all_numeric_predictors())
+
+ames_prep <- prep(ames_recipe, training = ames_train)
+train_ready <- bake(ames_prep, new_data = NULL)
+test_ready <- bake(ames_prep, new_data = ames_test)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+y_train = np.log10(ames_train["Sale_Price"])
+X_train = ames_train.drop(columns=["Sale_Price"])
+X_test = ames_test.drop(columns=["Sale_Price"])
+
+numeric_features = X_train.select_dtypes(include="number").columns
+categorical_features = X_train.select_dtypes(exclude="number").columns
+
+numeric_pipeline = Pipeline([
+    ("impute", SimpleImputer(strategy="median")),
+    ("scale", StandardScaler())
+])
+categorical_pipeline = Pipeline([
+    ("impute", SimpleImputer(strategy="most_frequent")),
+    ("dummy", OneHotEncoder(handle_unknown="ignore"))
+])
+
+preprocess = ColumnTransformer([
+    ("numeric", numeric_pipeline, numeric_features),
+    ("categorical", categorical_pipeline, categorical_features)
+])
+
+train_ready = preprocess.fit_transform(X_train)
+test_ready = preprocess.transform(X_test)
+```
+
+:::
+
+The recipe is estimated on `ames_train`. The test data receive the same
+learned mapping: the same rare-level rules, dummy columns, zero-variance
+filter, and normalization constants.
+
+## Transformations
+
+Transformations change the representation of predictors or the
+response. They can make simple models more effective, but they also
+change interpretation.
+
+| **Transformation** | **When useful **| **Interpretation** |
+|---|---|---|
+| Log response | Positive, right-skewed outcome | Effects are multiplicative on the original scale |
+| Log predictor | Diminishing returns in a positive predictor | One percent changes become natural |
+| Standardization | Penalties, distance methods, PCA, SVMs | Coefficients use standard deviation units |
+| Binning | Highly nonlinear or threshold-like behavior | Interpretation becomes interval-based |
+| Dummy encoding | Nominal categorical predictors | Coefficients compare to a reference level |
+
+Transformations should be chosen for a modeling reason, not merely
+because they make a plot look smoother.
+
+## Interaction Features
+
+An interaction is feature construction with a statistical
+interpretation. In the model
+
+$$
+\operatorname{E}(Y \mid X,Z)
+= \beta_0 + \beta_1X + \beta_2Z + \beta_3XZ,
+$$
+
+the effect of $X$ changes with $Z$. Interactions are especially useful
+when theory or visualization suggests that a relationship differs by
+group or by level of another variable.
+
+In housing data, the effect of living area might differ by neighborhood
+or overall quality. In advertising data, the return to TV spending
+might depend on radio spending. Interactions should be evaluated with
+held-out error and interpreted with marginal effects or predicted
+values, not only with coefficient signs.
+
+## Model-Ready Data Is Not Model-Free
+
+Preprocessing embeds modeling choices. Scaling assumes that relative
+distance matters. Rare-level lumping assumes sparse categories should
+share information. Dummy encoding chooses a reference structure.
+Feature engineering is therefore part of the model, and it must be
+reported with the same care as the final algorithm.

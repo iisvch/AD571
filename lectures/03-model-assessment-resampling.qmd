@@ -1,0 +1,873 @@
+---
+title: "Model Assessment and Resampling"
+---
+
+Resampling methods turn model fitting into model evaluation. Instead of
+trusting one fitted model or one arbitrary train/test split, we
+repeatedly refit a model on related versions of the data and study how
+its predictions or estimates change. This chapter uses resampling to
+answer two practical questions: how well will a model predict new data,
+and how much uncertainty is attached to a fitted statistic or model
+coefficient?
+
+## Learning Objectives
+
+- Distinguish training error, validation error, test error, and
+  cross-validation error.
+- Explain why a single validation split can be unstable.
+- Implement leave-one-out and k-fold cross-validation.
+- Use resampling to compare candidate regression models.
+- Use the bootstrap to estimate uncertainty in statistics and model
+  coefficients.
+
+## Why Training Error Is Not Enough
+
+A model is useful only if it generalizes. Training error measures how
+well the fitted model describes data it has already seen. Because the
+model was chosen to fit those observations, training error is usually
+optimistic. The more flexible the model, the easier it is to drive
+training error down without improving future predictions.
+
+The validation-set approach addresses this optimism by splitting the
+data into a training set and a held-out validation or test set. The
+model is fit only on the training set, and prediction error is computed
+on observations not used during fitting.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(ISLR)
+library(boot)
+library(ggplot2)
+
+auto <- na.omit(ISLR::Auto)
+
+set.seed(571)
+train_id <- sample(seq_len(nrow(auto)), size = 0.6 * nrow(auto))
+train <- auto[train_id, ]
+test <- auto[-train_id, ]
+
+fit <- lm(mpg ~ horsepower, data = train)
+pred <- predict(fit, newdata = test)
+mean((test$mpg - pred)^2)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+
+rng = np.random.default_rng(571)
+auto = pd.DataFrame({
+    "horsepower": rng.uniform(45, 230, 392)
+})
+auto["mpg"] = (
+    48 - 0.18 * auto["horsepower"] +
+    0.00035 * auto["horsepower"] ** 2 +
+    rng.normal(0, 3, len(auto))
+)
+
+train, test = train_test_split(auto, train_size=0.6, random_state=571)
+fit = smf.ols("mpg ~ horsepower", data=train).fit()
+pred = fit.predict(test)
+print(mean_squared_error(test["mpg"], pred))
+```
+
+:::
+
+The validation-set estimate is easy to understand, but it depends on
+which observations happen to fall in the training set. If we change the
+random split, the estimated test error can change as well.
+
+## Polynomial Complexity in the `Auto` Data
+
+The `Auto` data show a curved relationship between horsepower and gas
+mileage. A straight line is too rigid, but an extremely high-degree
+polynomial may fit noise. Resampling gives a disciplined way to compare
+model flexibility.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+ggplot(auto, aes(horsepower, mpg)) +
+  geom_point(alpha = 0.65) +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ poly(x, 2),
+    se = FALSE,
+    color = "#2f5f7e"
+  ) +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ poly(x, 4),
+    se = FALSE,
+    color = "#7a3035"
+  )
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+sns.regplot(data=auto, x="horsepower", y="mpg", order=1, scatter_kws={"alpha": 0.65})
+sns.regplot(data=auto, x="horsepower", y="mpg", order=2, scatter=False, color="#2f5f7e")
+sns.regplot(data=auto, x="horsepower", y="mpg", order=4, scatter=False, color="#7a3035")
+plt.show()
+```
+
+:::
+
+For one split, compute validation error for polynomial degrees 1
+through 10:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+train_id <- sample(seq_len(nrow(auto)), size = 0.6 * nrow(auto))
+train <- auto[train_id, ]
+test <- auto[-train_id, ]
+
+validation_error <- sapply(1:10, function(degree) {
+  fit <- lm(mpg ~ poly(horsepower, degree), data = train)
+  pred <- predict(fit, newdata = test)
+  mean((test$mpg - pred)^2)
+})
+
+data.frame(degree = 1:10, mse = validation_error)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+
+validation_error = []
+
+for degree in range(1, 11):
+    model = make_pipeline(
+        PolynomialFeatures(degree, include_bias=False),
+        LinearRegression()
+    )
+    model.fit(train[["horsepower"]], train["mpg"])
+    pred = model.predict(test[["horsepower"]])
+    validation_error.append(mean_squared_error(test["mpg"], pred))
+
+print(pd.DataFrame({"degree": range(1, 11), "mse": validation_error}))
+```
+
+:::
+
+The usual pattern is a sharp improvement from degree 1 to degree 2 and
+little consistent gain from higher degrees. The important lesson is not
+the exact best degree for one split; it is that the answer can vary
+when the split changes.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+split_errors <- do.call(rbind, lapply(1:10, function(seed) {
+  set.seed(seed)
+  train_id <- sample(seq_len(nrow(auto)), size = 0.6 * nrow(auto))
+  train <- auto[train_id, ]
+  test <- auto[-train_id, ]
+
+  data.frame(
+    split = seed,
+    degree = 1:10,
+    mse = sapply(1:10, function(degree) {
+      fit <- lm(mpg ~ poly(horsepower, degree), data = train)
+      pred <- predict(fit, newdata = test)
+      mean((test$mpg - pred)^2)
+    })
+  )
+}))
+
+ggplot(split_errors, aes(degree, mse, group = split)) +
+  geom_line(alpha = 0.45) +
+  geom_point(alpha = 0.45)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+split_records = []
+
+for seed in range(1, 11):
+    train_i, test_i = train_test_split(auto, train_size=0.6, random_state=seed)
+    for degree in range(1, 11):
+        model = make_pipeline(
+            PolynomialFeatures(degree, include_bias=False),
+            LinearRegression()
+        )
+        model.fit(train_i[["horsepower"]], train_i["mpg"])
+        pred = model.predict(test_i[["horsepower"]])
+        split_records.append({
+            "split": seed,
+            "degree": degree,
+            "mse": mean_squared_error(test_i["mpg"], pred)
+        })
+
+split_errors = pd.DataFrame(split_records)
+sns.lineplot(data=split_errors, x="degree", y="mse", units="split", estimator=None, alpha=0.45)
+plt.show()
+```
+
+:::
+
+Repeated splits usually agree that a quadratic model is much better
+than a line, but they need not agree on every detail. This instability
+motivates cross-validation.
+
+## Leave-One-Out Cross-Validation
+
+Leave-one-out cross-validation (LOOCV) uses each observation once as a
+validation point. For observation $i$, fit the model on all observations
+except $i$, predict the held-out response, and compute
+
+$$
+MSE_i = (y_i - \hat y_i)^2.
+$$
+
+The LOOCV estimate averages these $n$ errors:
+
+$$
+CV_{(n)} = \frac{1}{n}\sum_{i=1}^{n} MSE_i.
+$$
+
+The `boot::cv.glm()` function performs LOOCV when `K` is omitted. A
+linear model can be fit with `glm()` using its default Gaussian family.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+loocv_error <- function(degree) {
+  fit <- glm(mpg ~ poly(horsepower, degree), data = auto)
+  cv.glm(auto, fit)$delta[1]
+}
+
+sapply(1:5, loocv_error)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.model_selection import LeaveOneOut, cross_val_score
+
+def loocv_error(degree):
+    model = make_pipeline(
+        PolynomialFeatures(degree, include_bias=False),
+        LinearRegression()
+    )
+    scores = cross_val_score(
+        model,
+        auto[["horsepower"]],
+        auto["mpg"],
+        cv=LeaveOneOut(),
+        scoring="neg_mean_squared_error"
+    )
+    return -scores.mean()
+
+print([loocv_error(degree) for degree in range(1, 6)])
+```
+
+:::
+
+LOOCV uses nearly all observations for every fit, so it tends to have
+low bias as an estimate of test error. Its disadvantage is computation:
+large data sets or slow models can make LOOCV expensive.
+
+## k-Fold Cross-Validation
+
+k-fold cross-validation divides the data into $k$ roughly equal folds.
+For each fold, fit the model on the other $k - 1$ folds and evaluate on
+the held-out fold. The estimate is
+
+$$
+CV_{(k)} = \frac{1}{k}\sum_{j=1}^{k} MSE_j.
+$$
+
+LOOCV is the special case where $k=n$. In applied work, $k=5$ or
+$k=10$ is often a good compromise between statistical stability and
+computational cost.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+kfold_error <- function(degree, k = 10) {
+  fit <- glm(mpg ~ poly(horsepower, degree), data = auto)
+  cv.glm(auto, fit, K = k)$delta[1]
+}
+
+data.frame(
+  degree = 1:5,
+  loocv = sapply(1:5, loocv_error),
+  ten_fold = sapply(1:5, kfold_error)
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.model_selection import KFold
+
+def kfold_error(degree, k=10):
+    model = make_pipeline(
+        PolynomialFeatures(degree, include_bias=False),
+        LinearRegression()
+    )
+    scores = cross_val_score(
+        model,
+        auto[["horsepower"]],
+        auto["mpg"],
+        cv=KFold(n_splits=k, shuffle=True, random_state=571),
+        scoring="neg_mean_squared_error"
+    )
+    return -scores.mean()
+
+print(pd.DataFrame({
+    "degree": range(1, 6),
+    "loocv": [loocv_error(degree) for degree in range(1, 6)],
+    "ten_fold": [kfold_error(degree) for degree in range(1, 6)]
+}))
+```
+
+:::
+
+The LOOCV and 10-fold estimates should tell the same broad story:
+quadratic curvature matters, while higher-degree terms should be
+justified by their estimated out-of-sample performance rather than by
+training fit alone.
+
+## Comparing Candidate Sales Models
+
+The same logic applies to ordinary regression workflows. The `Carseats`
+data contain simulated sales of child car seats at 400 stores. Suppose
+we want to compare a full model with all predictors against a reduced
+model that focuses on predictors with a clearer sales mechanism.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+carseats <- ISLR::Carseats
+
+set.seed(571)
+train_id <- sample(seq_len(nrow(carseats)), size = 0.8 * nrow(carseats))
+train <- carseats[train_id, ]
+test <- carseats[-train_id, ]
+
+full_fit <- lm(Sales ~ ., data = train)
+reduced_fit <- lm(
+  Sales ~ CompPrice + Income + Advertising + Price + ShelveLoc + Age,
+  data = train
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+rng = np.random.default_rng(571)
+carseats = pd.DataFrame({
+    "Sales": rng.normal(8, 2, 400),
+    "CompPrice": rng.normal(125, 15, 400),
+    "Income": rng.normal(70, 25, 400),
+    "Advertising": rng.uniform(0, 25, 400),
+    "Price": rng.normal(115, 20, 400),
+    "ShelveLoc": rng.choice(["Bad", "Medium", "Good"], 400),
+    "Age": rng.normal(55, 15, 400),
+    "Population": rng.normal(250, 100, 400)
+})
+
+train, test = train_test_split(carseats, train_size=0.8, random_state=571)
+full_fit = smf.ols(
+    "Sales ~ CompPrice + Income + Advertising + Price + C(ShelveLoc) + Age + Population",
+    data=train
+).fit()
+reduced_fit = smf.ols(
+    "Sales ~ CompPrice + Income + Advertising + Price + C(ShelveLoc) + Age",
+    data=train
+).fit()
+```
+
+:::
+
+Residual standard error describes in-sample residual size. Test-set
+RMSE and test-set $R^2$ describe predictive performance on held-out
+observations.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+model_metrics <- function(fit, test_data, model_name) {
+  pred <- predict(fit, newdata = test_data)
+  actual <- test_data$Sales
+
+  rmse <- sqrt(mean((actual - pred)^2))
+  test_r2 <- 1 - sum((actual - pred)^2) /
+    sum((actual - mean(actual))^2)
+
+  data.frame(
+    model = model_name,
+    residual_se = sigma(fit),
+    rmse = rmse,
+    test_r2 = test_r2
+  )
+}
+
+rbind(
+  model_metrics(full_fit, test, "Full model"),
+  model_metrics(reduced_fit, test, "Reduced model")
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+def model_metrics(fit, test_data, model_name):
+    pred = fit.predict(test_data)
+    actual = test_data["Sales"]
+    rmse = mean_squared_error(actual, pred) ** 0.5
+    test_r2 = 1 - ((actual - pred) ** 2).sum() / ((actual - actual.mean()) ** 2).sum()
+    return {
+        "model": model_name,
+        "residual_se": np.sqrt(fit.scale),
+        "rmse": rmse,
+        "test_r2": test_r2
+    }
+
+print(pd.DataFrame([
+    model_metrics(full_fit, test, "Full model"),
+    model_metrics(reduced_fit, test, "Reduced model")
+]))
+```
+
+:::
+
+Because the reduced model is nested inside the full model, an ANOVA
+comparison can ask whether the omitted predictors improve the fit after
+the reduced model's predictors are already included.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+anova(reduced_fit, full_fit)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from statsmodels.stats.anova import anova_lm
+
+print(anova_lm(reduced_fit, full_fit))
+```
+
+:::
+
+Model comparison should combine statistical evidence, test performance,
+and interpretability. A slightly larger model is not automatically
+better if its added variables do not improve generalization or clarify
+the substantive claim.
+
+Cross-validation lets us compare the same two models without relying on
+one train/test split:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+glm_full <- glm(Sales ~ ., data = carseats)
+glm_reduced <- glm(
+  Sales ~ CompPrice + Income + Advertising + Price + ShelveLoc + Age,
+  data = carseats
+)
+
+data.frame(
+  model = c("Full model", "Reduced model"),
+  cv_5 = c(
+    cv.glm(carseats, glm_full, K = 5)$delta[1],
+    cv.glm(carseats, glm_reduced, K = 5)$delta[1]
+  ),
+  cv_10 = c(
+    cv.glm(carseats, glm_full, K = 10)$delta[1],
+    cv.glm(carseats, glm_reduced, K = 10)$delta[1]
+  ),
+  loocv = c(
+    cv.glm(carseats, glm_full)$delta[1],
+    cv.glm(carseats, glm_reduced)$delta[1]
+  )
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.model_selection import cross_val_score
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import make_pipeline
+
+X_full = carseats.drop(columns=["Sales"])
+y_sales = carseats["Sales"]
+X_reduced = carseats[["CompPrice", "Income", "Advertising", "Price", "ShelveLoc", "Age"]]
+
+def cv_rmse(X, y, k):
+    categorical = X.select_dtypes(exclude="number").columns
+    preprocess = ColumnTransformer([
+        ("categorical", OneHotEncoder(handle_unknown="ignore"), categorical)
+    ], remainder="passthrough")
+    model = make_pipeline(preprocess, LinearRegression())
+    scores = cross_val_score(
+        model, X, y,
+        cv=KFold(n_splits=k, shuffle=True, random_state=571),
+        scoring="neg_mean_squared_error"
+    )
+    return (-scores.mean()) ** 0.5
+
+print(pd.DataFrame({
+    "model": ["Full model", "Reduced model"],
+    "cv_5": [cv_rmse(X_full, y_sales, 5), cv_rmse(X_reduced, y_sales, 5)],
+    "cv_10": [cv_rmse(X_full, y_sales, 10), cv_rmse(X_reduced, y_sales, 10)]
+}))
+```
+
+:::
+
+## Simulated Nonlinear Data
+
+A simulation makes the role of model complexity visible because we know
+the data were generated from a nonlinear pattern.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+sim <- data.frame(x = runif(100, min = -10, max = 10))
+sim$y <- sin(sim$x) + 0.1 * sim$x^2 + rnorm(100)
+
+plot(y ~ x, data = sim, pch = 19, col = "#2f5f7e")
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+rng = np.random.default_rng(571)
+sim = pd.DataFrame({"x": rng.uniform(-10, 10, 100)})
+sim["y"] = np.sin(sim["x"]) + 0.1 * sim["x"] ** 2 + rng.normal(size=100)
+
+plt.scatter(sim["x"], sim["y"], color="#2f5f7e")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
+```
+
+:::
+
+Fit polynomial models and use 10-fold cross-validation to estimate
+generalization error:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+poly_cv <- sapply(1:15, function(degree) {
+  fit <- glm(y ~ poly(x, degree), data = sim)
+  cv.glm(sim, fit, K = 10)$delta[1]
+})
+
+plot(
+  1:15,
+  poly_cv,
+  type = "b",
+  xlab = "Polynomial degree",
+  ylab = "10-fold CV error"
+)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+poly_cv = [
+    -cross_val_score(
+        make_pipeline(PolynomialFeatures(degree, include_bias=False), LinearRegression()),
+        sim[["x"]],
+        sim["y"],
+        cv=KFold(n_splits=10, shuffle=True, random_state=571),
+        scoring="neg_mean_squared_error"
+    ).mean()
+    for degree in range(1, 16)
+]
+
+plt.plot(range(1, 16), poly_cv, marker="o")
+plt.xlabel("Polynomial degree")
+plt.ylabel("10-fold CV error")
+plt.show()
+```
+
+:::
+
+This exercise separates visual fit from estimated generalization. A
+model with many degrees may trace the observed points closely, but
+cross-validation asks whether that flexibility is likely to help on new
+data.
+
+## Bootstrapping
+
+Cross-validation estimates prediction error. Bootstrapping estimates
+uncertainty. A bootstrap sample draws $n$ rows from the original data,
+with replacement, and recomputes a statistic on the sampled data. After
+many bootstrap samples, the spread of the bootstrap estimates describes
+the statistic's sampling variability.
+
+If $\hat\alpha^{*1}, \ldots, \hat\alpha^{*B}$ are bootstrap estimates,
+the bootstrap standard error is
+
+$$
+SE_B(\hat\alpha)
+= \sqrt{
+\frac{1}{B-1}
+\sum_{r=1}^{B}
+\left(
+\hat\alpha^{*r}
+- \frac{1}{B}\sum_{s=1}^{B}\hat\alpha^{*s}
+\right)^2
+}.
+$$
+
+For the `Portfolio` data, one statistic of interest is the allocation
+that minimizes variance across two assets:
+
+$$
+\hat\alpha =
+\frac{\hat\sigma_Y^2 - \hat\sigma_{XY}}
+{\hat\sigma_X^2 + \hat\sigma_Y^2 - 2\hat\sigma_{XY}}.
+$$
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+portfolio <- ISLR::Portfolio
+
+alpha_stat <- function(data, index) {
+  x <- data$X[index]
+  y <- data$Y[index]
+  (var(y) - cov(x, y)) / (var(x) + var(y) - 2 * cov(x, y))
+}
+
+set.seed(571)
+boot(portfolio, alpha_stat, R = 1000)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+rng = np.random.default_rng(571)
+portfolio = pd.DataFrame({
+    "X": rng.normal(0, 1, 100),
+    "Y": rng.normal(0, 1, 100)
+})
+
+def alpha_stat(data):
+    x = data["X"]
+    y = data["Y"]
+    return (y.var() - x.cov(y)) / (x.var() + y.var() - 2 * x.cov(y))
+
+boot_alpha = []
+for _ in range(1000):
+    sample = portfolio.sample(len(portfolio), replace=True, random_state=rng.integers(1_000_000))
+    boot_alpha.append(alpha_stat(sample))
+
+print(pd.Series(boot_alpha).describe())
+```
+
+:::
+
+The same idea applies to regression coefficients. The function below
+refits the model on each bootstrap sample and returns the intercept and
+slope.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+boot_lm <- function(data, index) {
+  coef(lm(mpg ~ horsepower, data = data, subset = index))
+}
+
+set.seed(571)
+boot(auto, boot_lm, R = 1000)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+boot_lm = []
+for _ in range(1000):
+    sample = auto.sample(len(auto), replace=True, random_state=rng.integers(1_000_000))
+    fit = smf.ols("mpg ~ horsepower", data=sample).fit()
+    boot_lm.append(fit.params)
+
+print(pd.DataFrame(boot_lm).describe())
+```
+
+:::
+
+If a nonlinear mean structure is more appropriate, bootstrap the
+quadratic model instead:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+boot_quad <- function(data, index) {
+  coef(lm(mpg ~ poly(horsepower, 2), data = data, subset = index))
+}
+
+set.seed(571)
+boot(auto, boot_quad, R = 1000)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+boot_quad = []
+for _ in range(1000):
+    sample = auto.sample(len(auto), replace=True, random_state=rng.integers(1_000_000))
+    sample = sample.assign(horsepower2=sample["horsepower"] ** 2)
+    fit = smf.ols("mpg ~ horsepower + horsepower2", data=sample).fit()
+    boot_quad.append(fit.params)
+
+print(pd.DataFrame(boot_quad).describe())
+```
+
+:::
+
+The bootstrap does not replace model criticism. It quantifies
+variability for the statistic implied by the model and the data
+collection process. If the model is misspecified or the data are not
+representative, the bootstrap can still give a precise answer to the
+wrong question.

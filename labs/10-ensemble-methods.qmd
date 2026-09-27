@@ -1,0 +1,253 @@
+---
+title: "Lab 10: Ensemble Methods"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+# Support Packages
+
+```{r support, warning=FALSE,message=FALSE,include=TRUE}
+set.seed(16856)
+require(MASS)
+require(glmnet)
+library(kableExtra)
+library(stargazer)
+library(flextable)
+library(dplyr)
+library(leaps)
+library(caret)
+library(ggplot2)
+library(ggExtra)
+library(tidyr)
+library(ISLR2)
+library(ISLR)
+library(readr)
+library(reticulate)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("weights", "interactions", "cjoint", "plm", "interactions", "jtools", "stats", "miceadds", "broom", "RColorBrewer", "ggstatsplot", "ggpubr", "stargazer", "sandwich", "hrbrthemes", "rms", "interplot", "coefplot", "gmodels", "car", "lattice","foreign", "ggplot2", "MASS", "Hmisc", "reshape2", "oddsratio", "tidyr", "psych", "dplyr", "tidyverse", "cjoint")
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE, warning = FALSE, message = FALSE, fig.align='center')
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+```
+
+# Important Instructions
+
+-   <p style="color:#169179;">
+
+    All homeworks have 48 hours grace period. Submissions after the grace period will be graded with penalty.
+
+    </p>
+
+-   <p style="color:#169179;">
+
+    Use stargazer and kbl() to display tables and frames (1 per question)
+
+-   <p style="color:#169179;">
+
+    Use ggplot instead of the regular plot (1 per question)
+
+    </p>
+
+-   <p style="color:#ba372a;">
+
+    Don't display a full table. If the assignment has a complete table instead of head(table) we will drop ten points flat (-10)
+
+    </p>
+
+-   <p style="color:#ba372a;">
+
+    Make sure to have a unique seed. If it matches any other assignment or is not included, both will be penalized by -25 points.
+
+    <p>
+
+-   <p style="color:#ba372a;">
+
+    Coding is integral par of the assignment, but Points are awarded on how you interpret the code/data/figure/table. As a Data Scientist you have a responsibility to understand the data and not just run a code.
+
+    <p>
+
+# Import the Causation and Prediction Datasets. Show the summary of both datasets by using `summary`
+
+There are two data files. The `PredictionData` contains the fully imputed data ($7140 \times 286$) taken from *Hegre and Sambanis (2006)*. This first dataset was used to explore the predictive accuracy of random forests compared to logistic regression. Figures 1,2, and 4 were constructed from this data. The second data file, `CasualData` was used to explore causal mechanisms related to civil war onset. This is a smaller dataset ($7141 \times 53$) where only variables theorized to be most relevant to the onset of civil war were imputed.
+
+The following packages are needed for the assignment. The `doParallel` library provides parallelization for `for` loops. It allocates the job to **N** number of cores out of total cores resulting in faster execution. However, **This slows down the computer significantly, use with caution**.
+
+```{r imppackages, message=FALSE,warning=FALSE}
+library(randomForest) #for random forests
+library(caret) # for CV folds and data splitting
+library(ROCR) # for diagnostics and ROC plots/stats
+library(pROC) # same as ROCR
+library(stepPlr) # Firth;s logit implemented thru caret library
+library(doParallel) # for using multiple processor cores
+library(skimr)
+library(gt)
+library(corrplot)
+library(GGally)
+library(cvms)
+library(tibble)
+
+Prediction <- read.csv(file="data/Prediction.csv") # data for prediction
+Causation <- read.csv(file="data/Causal.csv") # data for causal mechanisms
+myvars <- names(Causation) %in% c("X", "country", "year", "atwards") 
+Causation_Clean <- Causation[!myvars]
+```
+
+## Data Subsetting and training controls
+
+```{r datasubsets,}
+###Using only the 88 variables specified in Sambanis (2006) Appendix###
+Sambanis<-Prediction[,c("warstds", "ager", "agexp", "anoc", "army85", "autch98", "auto4",
+        "autonomy", "avgnabo", "centpol3", "coldwar", "decade1", "decade2",
+        "decade3", "decade4", "dem", "dem4", "demch98", "dlang", "drel",
+        "durable", "ef", "ef2", "ehet", "elfo", "elfo2", "etdo4590",
+        "expgdp", "exrec", "fedpol3", "fuelexp", "gdpgrowth", "geo1", "geo2",
+        "geo34", "geo57", "geo69", "geo8", "illiteracy", "incumb", "infant",
+        "inst", "inst3", "life", "lmtnest", "ln_gdpen", "lpopns", "major", "manuexp", "milper",
+        "mirps0", "mirps1", "mirps2", "mirps3", "nat_war", "ncontig",
+        "nmgdp", "nmdp4_alt", "numlang", "nwstate", "oil", "p4mchg",
+        "parcomp", "parreg", "part", "partfree", "plural", "plurrel",
+        "pol4", "pol4m", "pol4sq", "polch98", "polcomp", "popdense",
+        "presi", "pri", "proxregc", "ptime", "reg", "regd4_alt", "relfrac", "seceduc",
+        "second", "semipol3", "sip2", "sxpnew", "sxpsq", "tnatwar", "trade",
+        "warhist", "xconst")]
+
+###Converting DV into Factor with names for Caret Library###
+Sambanis$warstds<-factor(
+  Sambanis$warstds,
+  levels=c(0,1),
+  labels=c("peace", "war"))
+
+registerDoParallel(cores=5) # distributing workload over multiple cores for faster computaiton
+
+
+#This method of data slicing - or CV - will be used for all logit models - uncorrected and corrected
+tc<-trainControl(method="cv", 
+                 number=10, #creates CV folds - 10 for this data
+                 summaryFunction=twoClassSummary, # provides ROC summary stats in call to model
+                 savePredictions = TRUE,
+                 returnData = TRUE,
+                 classProbs = TRUE)
+# tg <- expand.grid(n.trees = seq(50,1000,50), interaction.depth = c(30), shrinkage = c(0.1),nIter = seq(11, 51, by = 10))
+```
+
+# Train Gradient Boost with casual data and evualuate the performance of the model with Prediction Data.
+
+
+```{r adaboost, results='asis'}
+library(adabag)
+mod.ab1 <-train(as.factor(warstds)~warhist+ln_gdpen+lpopns+lmtnest+ncontig+oil+nwstate
+             +inst3+pol4+ef+relfrac,
+             metric="ROC", method="adaboost", # tuneGrid=tg,
+             trControl=tc, data=Sambanis)
+
+# mod.ab2 <-train(as.factor(warstds)~warhist+ln_gdpen+lpopns+lmtnest+ncontig+oil+nwstate
+#              +inst3+pol4+ef+relfrac, #FL 2003 model spec
+#              metric="ROC", method='AdaBoost.M1',
+#              trControl=tc, data=Sambanis)
+
+pred.ab1 <- predict(mod.ab1, Causation_Clean, type="prob")
+pred.ab1$warstds <-ifelse(pred.ab1$war > 0.5,1,0)
+
+ab1.pred <- ROCR::prediction(pred.ab1$warstds, Causation_Clean$warstds)
+perf.ab1 <- performance(ab1.pred,"tpr","fpr")
+plot(perf.ab1)
+# plot(mod.ab1)
+```
+
+# Train Bagged model with casual data and evualuate the performance of the model with Prediction Data.
+
+
+```{r baggedmod, results='asis'}
+set.seed(6895)
+
+
+mod.tb <-train(as.factor(warstds)~warhist+ln_gdpen+lpopns+lmtnest+ncontig+oil+nwstate
+             +inst3+pol4+ef+relfrac, #FL 2003 model spec
+             metric="ROC", method="treebag",
+             trControl=tc,
+             control = rpart.control(minsplit = 2, cp = 0),
+             data=Sambanis)
+
+pred.tb <- predict(mod.tb, Causation_Clean, type="prob")
+pred.tb$warstds <-ifelse(pred.tb$war > 0.5,1,0)
+
+tb.pred <- ROCR::prediction(pred.tb$warstds, Causation_Clean$warstds)
+perf.tb <- performance(tb.pred,"tpr","fpr")
+plot(perf.tb)
+```
+
+# Train Random Forest model with casual data and evualuate the performance of the model with Prediction Data.
+
+We now want to test how well the random forest performs when used on the *Hegre and Sambanis (2006) data*. For this we will use the same `train()` function from `caret` package. Since this is random forest, we will need to slightly change some of the parameters and the estimates. Remember random forest can only use equivalence matrices like confusion matrix. So the model comparison needs to be done using RO Curves. Do the following to fit the random forest.
+
+-   Using `randomForest()` fit the`warstds` variable (as factor) to all the variables in the data.
+    -   `sampsize` to `c(30,90)`,
+    -   `importance` to `T`,
+    -   `proximity` to `F`,
+    -   `ntree` to `1000`,
+    -   `confusion` to `T`,
+    -   `err.rate` to `T`
+-   Using train() fit the `warstds` variable (as factor) to all the variables in the data.
+    -   `metric` to `"ROC"`,
+    -   `method` to `"rf"`,
+    -   `sampsize` to `c(30,90)`,
+    -   `importance` to `T`,
+    -   `proximity` to `F`,
+    -   `ntree` to `1000`,
+    -   `trControl` to `tc`
+
+```{r HegreSambanisRF, }
+model.rf<-train(as.factor(warstds)~warhist+ln_gdpen+lpopns+lmtnest+ncontig+oil+nwstate
+             +inst3+pol4+ef+relfrac, 
+                  metric="ROC", method="rf", 
+                  sampsize=c(30,90), #Downsampling the class-imbalanced DV
+                    importance=T, # Variable importance measures retained
+                   proximity=F, ntree=1000, # number of trees grown
+                   trControl=tc, data=Sambanis)
+
+RF.1.pred <- predict(model.rf, Causation_Clean, type="prob")
+pred.RF.1 <- prediction(RF.1.pred$war, Causation_Clean$warstds)
+perf.RF.1 <- performance(pred.RF.1, "tpr", "fpr")
+plot(perf.RF.1, lwd=1.5)
+```
+
+
+# Python companion
+
+Bagging, random forests, and boosting all combine many weak or unstable learners, but they control variance and bias in different ways.
+
+```python
+import pandas as pd
+from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier, RandomForestClassifier
+from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+
+df = pd.read_csv("data/lab10.csv")
+X = pd.get_dummies(df.drop(columns="y"), drop_first=True)
+y = df["y"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, stratify=y, random_state=571)
+
+models = {
+    "bagging": BaggingClassifier(estimator=DecisionTreeClassifier(), n_estimators=300, random_state=571),
+    "random_forest": RandomForestClassifier(n_estimators=500, max_features="sqrt", random_state=571),
+    "gradient_boosting": GradientBoostingClassifier(n_estimators=300, learning_rate=0.05, max_depth=2, random_state=571),
+}
+
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    print(name)
+    print(classification_report(y_test, model.predict(X_test)))
+```
+

@@ -1,0 +1,121 @@
+---
+title: "Polynomial Regression and Step Functions"
+---
+
+Polynomial regression and step functions are two direct ways to move
+beyond a straight-line relationship while staying inside a regression
+framework. Polynomials create smooth global curves; step functions
+create piecewise constant regions.
+
+## Learning Objectives
+
+- Fit polynomial regression models.
+- Explain the difference between raw and orthogonal polynomial terms.
+- Fit step functions with cut points.
+- Use validation to choose polynomial degree or number of bins.
+- Communicate nonlinear fitted relationships with prediction plots.
+
+## Polynomial Terms
+
+A degree-$d$ polynomial regression has the form
+
+$$
+\operatorname{E}(Y \mid X=x)
+= \beta_0 + \beta_1x + \beta_2x^2 + \cdots + \beta_dx^d.
+$$
+
+The model is linear in the coefficients even though it is nonlinear in
+$x$.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+n <- 250
+nonlinear <- data.frame(age = runif(n, 18, 70))
+nonlinear$wage <- 18 + 2.1 * nonlinear$age -
+  0.025 * nonlinear$age^2 + rnorm(n, sd = 8)
+
+poly2 <- lm(wage ~ poly(age, 2), data = nonlinear)
+poly4 <- lm(wage ~ poly(age, 4), data = nonlinear)
+summary(poly2)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+
+rng = np.random.default_rng(571)
+n = 250
+nonlinear = pd.DataFrame({"age": rng.uniform(18, 70, n)})
+nonlinear["wage"] = (
+    18 + 2.1 * nonlinear["age"] -
+    0.025 * nonlinear["age"] ** 2 +
+    rng.normal(0, 8, n)
+)
+
+poly2 = make_pipeline(PolynomialFeatures(2, include_bias=False), LinearRegression())
+poly4 = make_pipeline(PolynomialFeatures(4, include_bias=False), LinearRegression())
+poly2.fit(nonlinear[["age"]], nonlinear["wage"])
+poly4.fit(nonlinear[["age"]], nonlinear["wage"])
+```
+
+:::
+
+High-degree polynomials can behave poorly near the boundaries of the
+data. Validation should decide whether additional degree earns better
+generalization.
+
+## Step Functions
+
+A step function turns a continuous predictor into intervals:
+
+$$
+\operatorname{E}(Y \mid X)
+= \beta_0 + \beta_1I(X \in C_1) + \cdots + \beta_KI(X \in C_K).
+$$
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+step_fit <- lm(wage ~ cut(age, breaks = 5), data = nonlinear)
+summary(step_fit)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import statsmodels.formula.api as smf
+
+step_data = nonlinear.copy()
+step_data["age_bin"] = pd.cut(step_data["age"], bins=5)
+step_fit = smf.ols("wage ~ C(age_bin)", data=step_data).fit()
+print(step_fit.summary())
+```
+
+:::
+
+Step functions are easy to explain but can create artificial jumps at
+cut points. They are useful when thresholds are substantively
+meaningful or when interpretability matters more than smoothness.

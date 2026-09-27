@@ -1,0 +1,291 @@
+---
+title: "Lab 11: Support Vector Machines"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+ Support Packages
+
+Please hide/remove the unnecessary support packages/functions. My `ggplot` theme parameters are removed. You can use them from the previous lab and assignment. Please remember the goal for giving you the theme skeleton is make you design yours. Although, **Beauty Lies in the Eye of the Beholder**.
+
+```{r support, warning=FALSE,message=FALSE,include=TRUE}
+require(MASS)
+require(glmnet)
+library(flextable)
+library(leaps)
+library(GGally)
+library(caret)
+library(readr)
+library(reticulate)
+library(corrplot)
+library(ggfortify)
+library(MASS)
+library(zoo)
+library(doParallel)
+library(lubridate)
+library(reshape2)
+library(data.table)
+library(klaR)
+library(feather)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("weights", "interactions", "cjoint", "plm", "interactions", "jtools", "stats", "miceadds", "broom", "RColorBrewer", "ggstatsplot", "ggpubr", "stargazer", "sandwich", "hrbrthemes", "rms", "interplot", "coefplot", "gmodels", "car", "lattice","foreign", "ggplot2", "MASS", "Hmisc", "reshape2", "oddsratio", "tidyr", "psych", "dplyr", "tidyverse", "cjoint", "ISLR","ISLR2","kableExtra","ggExtra","gridExtra")
+
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+no_cores <- detectCores() - 4  
+registerDoParallel(cores=no_cores)  
+```
+
+# Data Import and Cleaning and Exploration.
+
+The purpose of this study is to examine whether commercial wearable devices (Apple Watch and Fitbit)
+can accurately predict sedentary behavior and light, moderate, and vigorous physical activities and to
+develop indicators to assist in predictions for future studies. It's an okay [paper](https://europepmc.org/article/ppr/ppr123211) to read, however the data is what we want. The methods and results are summarized below. We will only run SVM with different kernels ans compare the results.
+
+
+## Methods
+
+We recruited a convenience sample of 49 participants (23 men and 26 women) to wear three
+devices, an Apple Watch Series 2, a Fitbit Charge HR2, and and iPhone 6S. Participants completed a 65-
+minute protocol consisting of 40 minutes of total treadmill time and 25 minutes of sitting or lying time.
+Indirect calorimetry was used to measure energy expenditure. The outcome variable for the study was the
+activity class; lying, sitting, walking self-paced, and running 3 METs, 5 METs, and 7 METs. Minute-by-minute heart rate, steps, distance, and calories from Apple Watch and Fitbit were included in four different
+machine learning models.
+
+## Results
+
+Our dataset included 3656 and 2608 minutes of Apple Watch and Fitbit data, respectively. We
+tested decision trees, support vector machines, random forest, and rotation forest models. Rotation forest
+models had the highest classification accuracies at 82.6% for Apple Watch and 89.3% for Fitbit.
+Classification ac curacies for Apple Watch data ranged from 72.5% for sitting to 89.0% for 7 METs . For
+Fitbit, accuracies varied between 86.2% for sitting to 92.6% for 7 METs.
+
+```{r importdata, warning=FALSE,message=FALSE}
+set.seed(123)
+library(mlbench)
+library(caret)
+library(caretEnsemble)
+library(e1071)
+library(tidyverse)
+
+fitbit <- data.frame(read.csv(file="data/aw_fb_data.csv")) # data for prediction
+  
+# fitbit <- fitbit %>%  mutate(activity_num = case_when(
+#     activity == "Lying" ~1,
+#     activity == "Running 3 METs" ~ 2,
+#     activity == "Running 5 METs" ~ 3,
+#     activity == "Running 7 METs" ~ 4,
+#     activity == "Self Pace walk" ~ 5,
+#     activity == "Sitting" ~ 6))
+# fitbit$activity_num <- as.factor(fitbit$activity_num)
+  
+fitbit_clean <- fitbit[c(-1, -2)]
+
+fitbit_clean %>% 
+  mutate(activity = factor(activity, 
+                        labels = make.names(levels(activity))))
+
+my_index <- createDataPartition(fitbit_clean$activity, p = 0.70, list = F)
+trainSet <- fitbit_clean[my_index, ]
+testSet <- fitbit_clean[-my_index, ]
+
+```
+
+## Exploring the dataset (not needed). 
+
+```{r eda, fig.align='center',fig.width=12, fig.height=12, dpi=300}
+ggpairs(fitbit_clean, ggplot2::aes(colour = as.factor(activity), alpha = 0.4))
+
+```
+
+
+# Fitting Linear Kernal for SVM
+
+## Fit the linear kernel to the train set with no scaling and cost parameter set to 10.
+
+```{r svmlin, warning=FALSE,message=FALSE}
+svm_lin <- svm(as.factor(activity) ~ ., data=trainSet,
+                 kernel="linear",scale=F) #linear/radial/polynomial/sigmoid
+```
+
+## create the confusion matrix. 
+
+Use [cvms](https://cran.r-project.org/web/packages/cvms/vignettes/Creating_a_confusion_matrix.html).
+
+```{r confmatlin,fig.align='center',fig.height=5, fig.width=5, dpi=300, warning=FALSE, message=FALSE}
+library(cvms)
+
+conf_tab <- tibble("target" = as.factor(testSet$activity),
+                  "prediction" = predict(svm_lin, testSet))
+
+conf_mat <- confusion_matrix(targets = conf_tab$target,
+                             predictions = conf_tab$prediction)
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]])
+
+```
+
+
+# Fitting radial kernal for SVM
+
+## Fit the radial kernel to the train set with no scaling and cost parameter set to 10.
+
+```{r svmrad, warning=FALSE,message=FALSE}
+svm_rad <- svm(as.factor(activity) ~ ., data=trainSet,
+                 kernel="radial",scale=F) #linear/radial/polynomial/sigmoid
+```
+
+## create the confusion matrix. 
+
+Use [cvms](https://cran.r-project.org/web/packages/cvms/vignettes/Creating_a_confusion_matrix.html).
+
+```{r confmatrad,fig.align='center',fig.height=5, fig.width=5, dpi=300, warning=FALSE, message=FALSE}
+library(cvms)
+
+conf_tab <- tibble("target" = as.factor(testSet$activity),
+                  "prediction" = predict(svm_rad, testSet))
+
+conf_mat <- confusion_matrix(targets = conf_tab$target,
+                             predictions = conf_tab$prediction)
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]])
+
+```
+
+
+
+# Fitting polynomial kernal for SVM
+
+## Fit the polynomial kernel to the train set with no scaling and cost parameter set to 10.
+
+```{r svmpoly, warning=FALSE,message=FALSE}
+svm_poly <- svm(as.factor(activity) ~ ., data=trainSet,
+                 kernel="polynomial",scale=F, degree=4, cost=10) #linear/radial/polynomial/sigmoid
+```
+
+## create the confusion matrix. 
+
+Use [cvms](https://cran.r-project.org/web/packages/cvms/vignettes/Creating_a_confusion_matrix.html).
+
+```{r confmatpoly,fig.align='center',fig.height=5, fig.width=5, dpi=300, warning=FALSE, message=FALSE}
+library(cvms)
+
+conf_tab <- tibble("target" = as.factor(testSet$activity),
+                  "prediction" = predict(svm_poly, testSet))
+
+conf_mat <- confusion_matrix(targets = conf_tab$target,
+                             predictions = conf_tab$prediction)
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]])
+
+```
+
+
+
+# Fitting sigmoid kernal for SVM
+
+## Fit the sigmoid kernel to the train set with no scaling and cost parameter set to 10.
+
+```{r svmsig, warning=FALSE,message=FALSE}
+svm_sig <- svm(as.factor(activity) ~ ., data=trainSet,
+                 kernel="sigmoid",scale=F) #linear/radial/polynomial/sigmoid
+```
+
+## create the confusion matrix. 
+
+Use [cvms](https://cran.r-project.org/web/packages/cvms/vignettes/Creating_a_confusion_matrix.html).
+
+```{r confmatsig,fig.align='center',fig.height=5, fig.width=5, dpi=300, warning=FALSE, message=FALSE}
+library(cvms)
+
+conf_tab <- tibble("target" = as.factor(testSet$activity),
+                  "prediction" = predict(svm_sig, testSet))
+
+conf_mat <- confusion_matrix(targets = conf_tab$target,
+                             predictions = conf_tab$prediction)
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]])
+
+```
+
+# Compare the ROC Curves
+
+
+```{r plotpredfunc, fig.align='center', fig.width=7,fig.height=4.5}
+
+```
+
+
+# Additional (not needed)
+
+
+```{r}
+# train_control <- trainControl(method="repeatedcv", number=10, repeats=3)
+
+svm1 <- caret::train(as.factor(activity) ~., data = trainSet, method = "svmLinear",     trControl = trainControl(method = "repeatedcv", repeats = 5, 
+classProbs =  TRUE))
+#, trControl = train_control,  preProcess = c("center","scale"))
+
+svm2 <- train(as.factor(activity) ~., data = trainSet, method = "svmLinear", tuneGrid = expand.grid(C = seq(0, 2, length = 20))) #trControl = train_control,  preProcess = c("center","scale"))
+
+svm3 <- train(as.factor(activity) ~., data = trainSet, method = "svmRadial")# , trControl = train_control, preProcess = c("center","scale"), tuneLength = 10)
+
+svm4 <- train(as.factor(activity) ~., data = trainSet, method = "svmPoly") #, trControl = train_control, preProcess = c("center","scale"), tuneLength = 4)
+
+svm4 <- train(as.factor(activity) ~., data = trainSet, method = "rbf") #, trControl = train_control, preProcess = c("center","scale"), tuneLength = 4)
+```
+
+```{r}
+svm1.pred <- predict(svm1, data=testSet)
+```
+
+
+# Python companion
+
+Support vector machines require tuning because the margin penalty and kernel parameters determine the shape of the decision boundary.
+
+```python
+import pandas as pd
+from sklearn.metrics import classification_report
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+
+df = pd.read_csv("data/lab11.csv")
+X = pd.get_dummies(df.drop(columns="y"), drop_first=True)
+y = df["y"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, stratify=y, random_state=571)
+
+pipe = Pipeline([
+    ("scale", StandardScaler()),
+    ("svm", SVC(probability=True)),
+])
+
+search = GridSearchCV(
+    pipe,
+    param_grid={
+        "svm__kernel": ["linear", "rbf"],
+        "svm__C": [0.1, 1, 10],
+        "svm__gamma": ["scale", 0.01, 0.1, 1],
+    },
+    cv=10,
+    scoring="accuracy",
+)
+search.fit(X_train, y_train)
+print(search.best_params_)
+print(classification_report(y_test, search.predict(X_test)))
+```
+

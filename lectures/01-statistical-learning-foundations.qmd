@@ -1,0 +1,435 @@
+---
+title: "Statistical Learning Foundations"
+---
+
+Statistical learning is the study of using data to estimate structure,
+make predictions, and quantify uncertainty. The course begins with a
+single guiding idea: most statistical learning methods are trying to
+learn something about an unknown relationship between inputs and an
+outcome, or about structure inside a data set.
+
+The methods in this course range from ordinary least squares to
+resampling, regularization, classification, trees, support vector
+machines, and unsupervised learning. They differ in notation and
+implementation, but they share a common workflow: define the learning
+problem, choose a model class, fit the model, assess performance, and
+communicate what the model can and cannot support.
+
+## Learning Objectives
+
+- Define statistical learning and explain how it overlaps with machine
+  learning.
+- Distinguish supervised, unsupervised, regression, and classification
+  problems.
+- Separate prediction goals from inference goals.
+- Write the basic supervised learning model $Y = f(X) + \epsilon$.
+- Define reducible error, irreducible error, training error, and test
+  error.
+- Explain why model flexibility creates a trade-off between underfitting
+  and overfitting.
+- Carry out an initial data inspection before fitting a first model.
+
+## Why Learn From Data?
+
+Statistical learning is useful when a problem contains patterns that are
+too complex, too noisy, or too data-dependent to be fully described by
+fixed rules. Examples include predicting a patient's risk after a heart
+attack, estimating future demand from economic indicators, recognizing
+handwritten digits, identifying spam, recommending movies, or modeling
+housing prices from neighborhood characteristics.
+
+The phrase "machine learning" often emphasizes algorithms, automation,
+scale, and prediction accuracy. The phrase "statistical learning" often
+emphasizes models, uncertainty, interpretation, and principled
+assessment. In practice, the boundary is blurry. A good analyst borrows
+from both traditions: use flexible tools when they improve performance,
+and use statistical thinking to understand what the evidence supports.
+
+The first habit is to name the task before choosing a method. A method
+that is excellent for predicting new outcomes may not give simple
+coefficient interpretations. A method that gives clear interpretations
+may not be the strongest predictor. The goal controls the evidence we
+need.
+
+## Learning Problems
+
+In supervised learning, each observation includes an outcome. The model
+uses predictors to estimate or predict that outcome. In unsupervised
+learning, there is no designated outcome; the goal is to discover
+structure among observations or variables.
+
+| Problem type | Outcome | Typical question | Example |
+|---|---|---|---|
+| Regression | Quantitative | What value should we predict? | Predict sales or home value. |
+| Classification | Categorical | Which class or probability should we assign? | Predict default or disease status. |
+| Clustering | None | Which observations are similar? | Segment customers by behavior. |
+| Dimension reduction | None | Can many variables be summarized by fewer features? | Build principal components from correlated measures. |
+| Anomaly detection | None or weak labels | Which cases are unusual? | Flag suspicious transactions. |
+
+Regression and classification are supervised tasks. Clustering and many
+dimension-reduction methods are unsupervised tasks. A single applied
+project can combine both: for example, cluster customers to describe
+groups, then use those groups as features in a supervised prediction
+model.
+
+## A Common Notation
+
+Suppose the data contain $n$ observations and $p$ predictors. For
+observation $i$, write the predictors as
+
+$$
+\begin{align}
+X_i = (X_{i1}, X_{i2}, \ldots, X_{ip})
+\end{align}
+$$
+
+and the outcome as $Y_i$. In a supervised learning problem, we assume
+there is some unknown relationship
+
+$$
+\begin{align}
+Y = f(X) + \epsilon,
+\end{align}
+$$
+
+where $f(X)$ is the systematic part of the relationship and $\epsilon$
+collects everything not explained by the predictors: measurement error,
+omitted variables, randomness, and unmodeled variation.
+
+The regression function is
+
+$$
+\begin{align}
+f(x) = \operatorname{E}(Y \mid X = x).
+\end{align}
+$$
+
+A fitted model $\hat f$ is an estimate of $f$. A simple linear model
+estimates $f$ with a line or plane. A tree, random forest, spline, or
+support vector machine estimates $f$ with a more flexible shape. The
+question is not which method is universally best. The question is which
+method learns useful structure for the problem, data, and decision at
+hand.
+
+## Prediction, Inference, Description, and Decisions
+
+Prediction asks for accurate values of $\hat Y$ on future or held-out
+cases. Inference asks what the data suggest about the relationship
+between variables. Description asks what patterns are visible in the
+data. Decision support asks what action should be taken after accounting
+for error costs and uncertainty.
+
+| Goal | Main question | Typical evidence |
+|---|---|---|
+| Prediction | How well does the model generalize? | Validation error, test error, calibration |
+| Inference | Which relationships are supported? | Coefficients, uncertainty intervals, diagnostics |
+| Description | What patterns are visible? | Summaries, plots, cluster profiles |
+| Decision support | What action should be taken? | Error costs, constraints, uncertainty |
+
+These goals can overlap, but they should not be confused. A model can
+predict well and still be difficult to interpret. A model can have
+interpretable coefficients and still predict poorly outside the training
+data. A model can describe an association and still fail to justify a
+causal claim.
+
+## Reducible and Irreducible Error
+
+At a new point $x_0$, the prediction error for a quantitative outcome
+can be written as
+
+$$
+\begin{align}
+\operatorname{E}\{(Y - \hat f(x_0))^2\}
+= \operatorname{E}\{(f(x_0) - \hat f(x_0))^2\}
++ \operatorname{Var}(\epsilon).
+\end{align}
+$$
+
+The first term is reducible error. It may decrease if we collect better
+data, engineer better predictors, choose a better model class, tune the
+method more carefully, or use more observations. The second term is
+irreducible error. Even if $f$ were known perfectly, two observations
+with the same predictors could still have different outcomes.
+
+This distinction keeps model assessment realistic. A model can be
+improved, but not every error is a modeling failure. Some uncertainty is
+part of the data-generating process.
+
+## Flexibility, Underfitting, and Overfitting
+
+Model flexibility describes how many shapes a method can learn. A linear
+model is relatively inflexible. A high-degree polynomial, deep tree, or
+large ensemble can be much more flexible.
+
+| Model behavior | What happens | Common symptom |
+|---|---|---|
+| Underfitting | The model is too rigid to capture real structure. | High training error and high test error. |
+| Useful fit | The model captures stable signal without chasing noise. | Low test error relative to simpler alternatives. |
+| Overfitting | The model adapts to noise in the training data. | Very low training error but high test error. |
+
+Increasing flexibility usually lowers training error. It does not always
+lower test error. Test error often decreases at first as the model
+captures real structure, then increases when the model begins to chase
+noise. This is the practical version of the bias-variance trade-off:
+rigid models can have high bias, while overly flexible models can have
+high variance.
+
+## Training Error and Test Error
+
+Training error is computed on the same observations used to fit the
+model. Test error is computed on observations not used to fit or tune
+the model. Because the model has already adapted to the training data,
+training error is usually too optimistic as a measure of future
+performance.
+
+For regression, a common loss is mean squared error:
+
+$$
+\begin{align}
+\operatorname{MSE}
+= \frac{1}{n}\sum_{i=1}^{n}(y_i - \hat y_i)^2.
+\end{align}
+$$
+
+For classification, a common measure is the misclassification rate:
+
+$$
+\begin{align}
+\operatorname{MCE}
+= \frac{1}{n}\sum_{i=1}^{n} I(y_i \neq \hat y_i).
+\end{align}
+$$
+
+Accuracy alone can be misleading when classes are rare or when different
+mistakes have different costs. Later chapters will add sensitivity,
+specificity, precision, ROC curves, and calibration. The important first
+principle is simple: evaluate the model on data that were not used to
+choose it.
+
+## The Statistical Learning Workflow
+
+A reproducible statistical learning analysis usually follows this
+sequence:
+
+1. State the question and identify the outcome, predictors, and unit of
+   observation.
+2. Inspect the data for scale, missingness, unusual values, and visible
+   relationships.
+3. Choose a baseline model that is simple enough to understand.
+4. Split the data or use resampling to estimate out-of-sample
+   performance.
+5. Fit candidate models and compare them using evidence tied to the
+   project goal.
+6. Diagnose limitations: assumptions, extrapolation, instability,
+   confounding, fairness concerns, and data quality.
+7. Communicate the result in language that matches the evidence.
+
+The baseline model is not a formality. It provides a reference point.
+If a more complex method does not improve on a simple baseline, the
+simple model may be the better choice.
+
+## Opening Example: Housing Data
+
+A first analysis should begin before modeling. In the Boston housing
+data, the observational unit is a census tract, the response `medv` is
+median home value, and candidate predictors include crime rate,
+industrial land use, distance to employment centers, pupil-teacher
+ratio, and other tract-level summaries. The data are historical and
+should be used as a methods example rather than as a current policy
+description.
+
+Before fitting a model, answer five questions:
+
+1. What is the response, and what does one row represent?
+2. Which predictors are quantitative and which are categorical or
+   binary?
+3. Are there unusual values, impossible values, or strong skew?
+4. Which pairwise relationships with the response are most visible?
+5. Which baseline model is simple enough to interpret?
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+library(ggplot2)
+library(tidyverse)
+library(reticulate)
+reticulate::py_install("pandas")
+reticulate::py_install("scikit-learn")
+reticulate::py_install("scipy")
+
+boston <- read.csv("../datasets/Boston.csv")
+```
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+str(boston)
+summary(boston)
+```
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+#| fig-cap: "A simple baseline relationship between percent lower status population and median home value."
+#| fig-alt: "A scatterplot of median home value against percent lower status population, with a fitted line showing a negative relationship."
+#| label: fig-baseline
+baseline_g <- ggplot(boston, aes(lstat, medv)) +
+  geom_point(alpha = 0.65) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Percent lower status population",
+    y = "Median home value",
+    title = "A simple baseline relationship"
+  );
+
+baseline_g
+
+```
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+#| output: asis
+
+baseline <- lm(medv ~ lstat, data = boston)
+expanded <- lm(medv ~ lstat + rm, data = boston)
+
+# summary(baseline)
+# summary(expanded)
+stargazer::stargazer(baseline, expanded, type = "html",summary=TRUE,report = "vc*stp",ci=TRUE)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: true
+#| fig-align: center
+
+import pandas as pd
+import seaborn as sns
+import statsmodels.formula.api as smf
+import matplotlib.pyplot as plt
+
+boston = pd.read_csv("../datasets/Boston.csv")
+
+print(boston.info())
+print(boston.describe())
+
+sns.regplot(data=boston, x="lstat", y="medv", scatter_kws={"alpha": 0.65})
+plt.xlabel("Percent lower status population")
+plt.ylabel("Median home value")
+plt.title("A simple baseline relationship")
+plt.show()
+
+baseline = smf.ols("medv ~ lstat", data=boston).fit()
+expanded = smf.ols("medv ~ lstat + rm + ptratio + crim", data=boston).fit()
+
+print(baseline.summary())
+print(expanded.summary())
+
+```
+
+:::
+
+The purpose of this first fit is orientation. The baseline model asks
+whether one visible predictor carries useful signal. The expanded model
+asks whether additional predictors change prediction and interpretation.
+Neither model should be treated as final until it has been checked on
+held-out data and examined through diagnostics.
+
+## First Train/Test Split
+
+The next step is to estimate how the model performs away from the data
+used to fit it.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: true
+set.seed(571)
+
+id <- sample(seq_len(nrow(boston)), size = 0.8 * nrow(boston))
+train <- boston[id, ]
+test <- boston[-id, ]
+
+fit <- lm(medv ~ lstat + rm + ptratio + crim, data = train)
+pred <- predict(fit, newdata = test)
+
+rmse <- sqrt(mean((test$medv - pred)^2))
+test_r2 <- 1 - sum((test$medv - pred)^2) /
+  sum((test$medv - mean(test$medv))^2)
+
+c(rmse = rmse, test_r2 = test_r2)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: true
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+
+train, test = train_test_split(boston, train_size=0.8, random_state=571)
+
+fit = smf.ols("medv ~ lstat + rm + ptratio + crim", data=train).fit()
+pred = fit.predict(test)
+
+rmse = mean_squared_error(test["medv"], pred) ** 0.5
+test_r2 = r2_score(test["medv"], pred)
+
+print({"rmse": round(rmse,4), "test_r2": round(test_r2,4)})
+```
+
+:::
+
+Residual standard error describes typical residual size in the training
+data. Test RMSE describes typical prediction error on observations not
+used to estimate the coefficients. Both can be useful, but they answer
+different questions.
+
+## Assumptions as Modeling Questions
+
+Ordinary least squares relies on assumptions that should be treated as
+diagnostic questions rather than as boxes to check mechanically:
+
+| Assumption | Practical question |
+|---|---|
+| Linearity | Is the conditional mean roughly linear in the predictors used? |
+| Independent errors | Are observations collected in a way that creates dependence? |
+| Constant variance | Does residual spread change with fitted values or predictors? |
+| Approximate normality | Are interval estimates relying on a poor error approximation? |
+| No extreme leverage | Are a few observations controlling the fitted relationship? |
+
+The assumptions matter because they affect interpretation,
+uncertainty, and prediction. When a diagnostic reveals a problem, the
+next step may be a transformation, an interaction, a nonlinear term, a
+different model class, or a narrower claim.
+
+## Closing Checklist
+
+By the end of a first statistical learning analysis, you should be able
+to say:
+
+- The unit of observation is clear.
+- The response and predictors are defined.
+- The learning task is regression, classification, unsupervised
+  learning, or a combination.
+- The goal is prediction, inference, description, decision support, or a
+  named mixture of these.
+- A simple baseline model has been fit.
+- Performance has been assessed on held-out data or with a resampling
+  plan.
+- The main limitations of the model are stated plainly.

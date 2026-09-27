@@ -1,0 +1,292 @@
+/*-- scss:defaults --*/
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap');
+
+$paper: #fbfaf6;
+$surface: #fffefb;
+$surface-alt: #f3efe5;
+$ink: #202629;
+$muted: #637078;
+$navy: #18324c;
+$blue: #2f5f7e;
+$oxblood: #7a3035;
+$gold: #b28a3a;
+$sage: #657c70;
+$border: #d9d1c1;
+
+$body-bg: $paper;
+$body-color: $ink;
+$font-family-base: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+$font-family-sans-serif: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+$font-family-monospace: 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+$headings-font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+$headings-color: $navy;
+$link-color: $blue;
+$link-hover-color: $oxblood;
+$code-color: #5f4720;
+$code-bg: #f0eadf;
+$pre-bg: #f6f1e8;
+$border-color: $border;
+$table-border-color: $border;
+$table-striped-bg: rgba(101, 124, 112, 0.08);
+$blockquote-border-color: $gold;
+$figure-caption-color: $muted;
+
+/*-- scss:rules --*/
+:root {
+  --course-paper: #{$paper};
+  --course-surface: #{$surface};
+  --course-surface-alt: #{$surface-alt};
+  --course-ink: #{$ink};
+  --course-muted: #{$muted};
+  --course-navy: #{$navy};
+  --course-blue: #{$blue};
+  --course-oxblood: #{$oxblood};
+  --course-gold: #{$gold};
+  --course-sage: #{$sage};
+  --course-border: #{$border};
+}
+
+body {
+  background:
+    linear-gradient(180deg, rgba(243, 239, 229, 0.68), rgba(251, 250, 246, 0) 18rem),
+    var(--course-paper);
+  color: var(--course-ink);
+  font-size: 17px;
+  line-height: 1.68;
+  text-rendering: optimizeLegibility;
+}
+
+#quarto-content {
+  background: transparent;
+}
+
+main.content {
+  background: var(--course-surface);
+  border-left: 1px solid rgba(217, 209, 193, 0.8);
+  border-right: 1px solid rgba(217, 209, 193, 0.8);
+  box-shadow: 0 18px 50px rgba(24, 50, 76, 0.07);
+  padding: 2.4rem 3rem 3rem;
+}
+
+p,
+li {
+  max-width: 72ch;
+}
+
+a {
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  color: var(--course-oxblood);
+}
+
+.quarto-title {
+  border-bottom: 3px double var(--course-border);
+  margin-bottom: 2rem;
+  padding-bottom: 1.1rem;
+}
+
+h1,
+.title h1,
+.quarto-title .title {
+  color: var(--course-navy);
+  font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: clamp(2rem, 2.5vw, 2.8rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--course-navy);
+  font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+h2 {
+  border-bottom: 1px solid var(--course-border);
+  margin-top: 2.7rem;
+  padding-bottom: 0.35rem;
+}
+
+h3 {
+  color: var(--course-blue);
+  margin-top: 2rem;
+}
+
+h4,
+h5,
+h6 {
+  color: var(--course-sage);
+}
+
+.quarto-title-meta,
+.subtitle,
+.date {
+  color: var(--course-muted);
+  font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#quarto-sidebar {
+  background: #f2eee5;
+  border-right: 1px solid var(--course-border);
+  font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#quarto-sidebar .sidebar-title {
+  color: var(--course-navy);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+#quarto-sidebar .sidebar-link,
+#quarto-sidebar .sidebar-item-toggle {
+  border-radius: 4px;
+  color: #34434a;
+}
+
+#quarto-sidebar .sidebar-link:hover {
+  background: rgba(47, 95, 126, 0.09);
+  color: var(--course-blue);
+}
+
+#quarto-sidebar .sidebar-link.active {
+  background: rgba(122, 48, 53, 0.1);
+  border-left: 3px solid var(--course-oxblood);
+  color: var(--course-oxblood);
+  font-weight: 700;
+}
+
+#quarto-margin-sidebar {
+  color: var(--course-muted);
+  font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#quarto-margin-sidebar .toc-active {
+  border-left-color: var(--course-oxblood);
+  color: var(--course-oxblood);
+}
+
+.sidebar nav[role="doc-toc"] ul > li > a.active,
+.sidebar nav[role="doc-toc"] ul > li > ul > li > a.active {
+  color: var(--course-oxblood) !important;
+}
+
+code {
+  background-color: $code-bg;
+  border: 1px solid rgba(178, 138, 58, 0.22);
+  border-radius: 4px;
+  color: $code-color;
+  font-size: 0.9em;
+  padding: 0.12em 0.32em;
+}
+
+pre,
+div.sourceCode {
+  background: $pre-bg;
+  border: 1px solid var(--course-border);
+  border-left: 4px solid var(--course-sage);
+  border-radius: 6px;
+}
+
+pre code {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+}
+
+blockquote {
+  background: rgba(178, 138, 58, 0.08);
+  border-left: 4px solid var(--course-gold);
+  color: #3f474b;
+  padding: 0.85rem 1.1rem;
+}
+
+.figure-caption,
+figcaption,
+.table-caption,
+caption {
+  color: var(--course-muted);
+  font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 0.92rem;
+  font-style: italic;
+}
+
+table {
+  border-color: var(--course-border);
+  font-size: 0.96rem;
+}
+
+thead,
+tbody tr.header {
+  background: #ebe4d6;
+  border-bottom: 2px solid var(--course-gold);
+  color: var(--course-navy);
+  font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(101, 124, 112, 0.06);
+}
+
+.callout {
+  background: var(--course-surface);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.callout.callout-style-default {
+  border-left-width: 4px;
+}
+
+.callout-note {
+  border-left-color: var(--course-blue);
+}
+
+.callout-tip {
+  border-left-color: var(--course-sage);
+}
+
+.callout-warning,
+.callout-caution {
+  border-left-color: var(--course-gold);
+}
+
+.callout-important {
+  border-left-color: var(--course-oxblood);
+}
+
+.chapter-number {
+  color: var(--course-oxblood);
+}
+
+.nav-page a {
+  color: var(--course-blue);
+  font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+hr {
+  border-color: var(--course-border);
+  opacity: 1;
+}
+
+@media (max-width: 991.98px) {
+  main.content {
+    border-left: 0;
+    border-right: 0;
+    box-shadow: none;
+    padding: 1.5rem 1.2rem 2rem;
+  }
+
+  body {
+    font-size: 16px;
+  }
+}

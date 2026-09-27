@@ -1,0 +1,104 @@
+---
+title: "Discriminant Analysis"
+---
+
+Discriminant analysis is a probability-based approach to
+classification. Instead of modeling $\Pr(Y=1 \mid X)$ directly, it
+models the distribution of predictors within each class and combines
+those distributions with class priors.
+
+## Learning Objectives
+
+- Explain Bayes' rule for classification.
+- Distinguish LDA from QDA.
+- Interpret class priors, posterior probabilities, and decision
+  boundaries.
+- Compare logistic regression, LDA, and QDA.
+- Evaluate discriminant models with thresholds and ROC-style thinking.
+
+## Bayes' Rule for Classification
+
+For class $k$,
+
+$$
+\Pr(Y=k \mid X=x)
+= \frac{\pi_k f_k(x)}
+{\sum_{\ell=1}^{K}\pi_\ell f_\ell(x)},
+$$
+
+where $\pi_k$ is the prior probability of class $k$ and $f_k(x)$ is the
+class-conditional density.
+
+LDA assumes all classes share a covariance matrix. QDA allows each
+class to have its own covariance matrix.
+
+## LDA and QDA Example
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+library(MASS)
+
+set.seed(571)
+n <- 400
+disc <- data.frame(
+  balance = rnorm(n, 1200, 450),
+  income = rnorm(n, 60000, 18000)
+)
+eta <- -5 + 0.003 * disc$balance - 0.00001 * disc$income
+disc$default <- factor(rbinom(n, 1, plogis(eta)),
+                       labels = c("No", "Yes"))
+
+lda_fit <- lda(default ~ balance + income, data = disc)
+qda_fit <- qda(default ~ balance + income, data = disc)
+
+lda_prob <- predict(lda_fit)$posterior[, "Yes"]
+qda_prob <- predict(qda_fit)$posterior[, "Yes"]
+head(lda_prob)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+import numpy as np
+import pandas as pd
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+
+rng = np.random.default_rng(571)
+n = 400
+disc = pd.DataFrame({
+    "balance": rng.normal(1200, 450, n),
+    "income": rng.normal(60000, 18000, n)
+})
+eta = -5 + 0.003 * disc["balance"] - 0.00001 * disc["income"]
+disc["default"] = np.where(rng.binomial(1, 1 / (1 + np.exp(-eta))), "Yes", "No")
+
+X = disc[["balance", "income"]]
+y = disc["default"]
+lda_fit = LinearDiscriminantAnalysis().fit(X, y)
+qda_fit = QuadraticDiscriminantAnalysis().fit(X, y)
+
+lda_prob = lda_fit.predict_proba(X)[:, list(lda_fit.classes_).index("Yes")]
+qda_prob = qda_fit.predict_proba(X)[:, list(qda_fit.classes_).index("Yes")]
+print(lda_prob[:5])
+```
+
+:::
+
+LDA is more restrictive but often more stable. QDA is more flexible but
+requires more data because it estimates separate covariance structures.
+
+## Comparing with Logistic Regression
+
+Logistic regression and LDA can produce similar boundaries when class
+conditional distributions are close to normal with common covariance.
+QDA can bend the boundary when covariance differs across classes.

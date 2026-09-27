@@ -1,0 +1,179 @@
+---
+title: "Lab 01: Exploratory Regression"
+execute:
+  enabled: false
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    toc: true
+    number-sections: true
+---
+```{r setup, include=FALSE}
+library(kableExtra)
+library(stargazer)
+library(flextable)
+library(dplyr)
+library(tidyr)
+library(ISLR2)
+library(reticulate)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,echo = TRUE)
+
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+```
+
+# To begin, Load in the Boston data set. The Boston data set is part of the MASS library in R. Now the data set is contained in the object `Boston`. Read about the dataset by `?Boston`
+
+```{r dataimport, warning=FALSE, message=FALSE}
+library(MASS)
+library(ISLR2)
+head(Boston) %>% kbl()
+```
+# How many rows are in this data set? How many columns? What do the rows and columns represent?
+
+There are `dim(Boston)[1]` row in the dataset representing number of observations. There are `dim(Boston)[2]` columns in the dataset representing columns.
+```{r dimschunk}
+dim(Boston)
+bb <- Boston
+```
+
+```{r}
+summary(lm(medv~.,Boston))
+```
+
+
+# Make some pairwise scatterplots of the predictors (columns) in this data set. Describe your findings.
+From the pairwise scatter plot we can find that median value of owner-occupied homes seems to have positive relationship with average number of rooms per dwelling; weighted mean of distances to five Boston employment centres appear to have a quadratic relationship with nitrogen oxides concentration, and has a weak positive relationship with proportion of residential land zoned for lots.
+
+```{r pairplots, fig.width=11, fig.height=11}
+pairs(Boston, pch=21, bg="#336699")
+```
+
+# Do any of the suburbs of Boston appear to have particularly high crime rates? Tax rates? Pupil-teacher ratios? Comment on the range of each predictor.
+
+The index of accessibility to radial highways(rad) and the full-value property-tax rate(tax) seems to have median positive relationship with per capita crime rate. Their coefficients of association are 0.626 and 0.583,respectively.
+
+```{r}
+cor(Boston[-1],Boston[1]) %>% kbl()
+```
+
+```{r}
+max(Boston["crim"])
+```
+
+```{r}
+hist(Boston$tax, breaks = 20)
+```
+
+```{r}
+
+hist(Boston$ptratio, breaks = 20)
+
+```
+
+The crime rate of one of the suburbs of Boston is `max(Boston$crim)`, which is appreciably higher than other suburbs. The distributions of tax rate and pupil-teacher ratio of each suburb are more normal. The tax rate ranges from 187 to 711, with mean value 408. The pupil-teacher ratio ranges from 12.6 to 22.
+
+```{r}
+summary(Boston$crim)
+```
+
+
+```{r}
+summary(Boston$tax)
+
+```
+
+```{r}
+summary(Boston$ptratio)
+```
+
+
+There are `nrow(Boston[Boston$chas==1,])` suburbs in this data set bound the Charles river.
+
+# How many of the suburbs in thls data set bound the Charles river?
+
+```{r}
+nrow(Boston[Boston$chas==1,])
+
+#as.data.frame(apply(df1,2,summary))
+```
+
+
+The median pupil-teacher ratio among the towns in this data set is `median(Boston$ptratio)`
+
+<!-- # ```{r} -->
+<!-- # median(Boston$ptratio) -->
+<!-- # ``` -->
+
+# Which suburb of Boston has lowest median value of owneroccupied homes? What are the values of the other predictors for that suburb, and how do those values compare to the overall ranges for those predictors? Comment on your findings.
+
+The subrubs `which(Boston$medv==min(Boston$medv))[1]` and `which(Boston$medv==min(Boston$medv))[2]` suburb in this data set have the lowest median value of owner-occupied homes.
+
+```{r}
+which(Boston$medv==min(Boston$medv))
+```
+
+The values of the other predictors for these two suburbs are shown below. The crime rate, age(proportion of owner-occupied units built prior to 1940), rad(index of accessibility to radial highways), tax, pupil-teacher ratio by town, black and lstat of these two suburbs are far higher than average.
+
+```{r}
+Boston[c(399,406),]
+
+```
+
+  - zn(proportion of residential land zoned),
+  - rm(average number of rooms per dwelling),
+  - dis(weighted mean of distances to five Boston employment centres)
+  - medv(median value of owner-occupied homes ) are lower than average level.
+  - indus(proportion of non-retail business acres per town),
+  - nox(nitrogen oxides concentration) of these two suburbs are little higher than average.
+
+```{r}
+summary(Boston[-c(399,406),])
+```
+
+# In this data set, how many of the suburbs average more than seven rooms per dwelling? More than eight rooms per dwelling? Comment on the suburbs that average more than eight rooms per dwelling.
+
+`nrow(Boston[Boston$rm>7,])` suburbs average more than seven rooms per dwelling, and only `nrow(Boston[Boston$rm>8,])` suburbs average more than eight rooms per dwelling.
+
+```{r}
+nrow(Boston[Boston$rm>7,])
+nrow(Boston[Boston$rm>8,])
+```
+
+
+# Python companion
+
+The Python workflow mirrors the exploratory regression workflow: load the data, inspect the variables, visualize relationships, fit a linear model, and evaluate prediction error.
+
+```python
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import statsmodels.formula.api as smf
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+
+# Adjust the file name and column names to match the lab data.
+df = pd.read_csv("data/boston.csv")
+
+print(df.head())
+print(df.describe(include="all"))
+
+sns.pairplot(df[["medv", "lstat", "rm", "crim", "tax", "ptratio"]].dropna())
+plt.show()
+
+train, test = train_test_split(df, test_size=0.30, random_state=571)
+model = smf.ols("medv ~ lstat + rm + crim + tax + ptratio", data=train).fit()
+print(model.summary())
+
+pred = model.predict(test)
+print("RMSE:", mean_squared_error(test["medv"], pred, squared=False))
+print("R-squared:", r2_score(test["medv"], pred))
+```
+
+

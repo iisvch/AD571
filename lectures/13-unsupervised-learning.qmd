@@ -1,0 +1,200 @@
+---
+title: "Unsupervised Learning"
+---
+
+Unsupervised learning searches for structure without a designated
+response variable. Because there is no outcome to predict, the quality
+of the analysis depends on preprocessing, distance measures, stability,
+and whether the discovered structure answers a meaningful question.
+
+## Learning Objectives
+
+- Distinguish supervised prediction from unsupervised structure
+  discovery.
+- Use PCA for visualization and compression.
+- Compare k-means and hierarchical clustering.
+- Explain how scaling and distance metrics affect clusters.
+- Evaluate unsupervised results with stability and interpretability.
+
+## No Response, No Single Test Error
+
+In supervised learning, held-out error provides a natural evaluation
+target. In unsupervised learning, there is no response variable, so
+there is no single test error to optimize. Instead, analysts ask:
+
+- Are the patterns stable under reasonable preprocessing choices?
+- Are clusters separated enough to describe?
+- Do the patterns persist across resamples?
+- Are the discovered groups useful for a later scientific or business
+  question?
+- Could the result be an artifact of scale, outliers, or distance
+  choice?
+
+## PCA for Structure
+
+PCA is often used to visualize high-dimensional data before clustering.
+It creates uncorrelated component scores ordered by explained variance.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+x <- scale(USArrests)
+pca <- prcomp(x)
+plot(pca$x[, 1], pca$x[, 2], pch = 19)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+
+x = StandardScaler().fit_transform(us_arrests)
+pca = PCA().fit_transform(x)
+
+plt.scatter(pca[:, 0], pca[:, 1])
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.show()
+```
+
+:::
+
+The first two components may reveal broad separation among
+observations, but they do not guarantee meaningful clusters. PCA finds
+directions of high variance, not necessarily directions that match a
+substantive grouping.
+
+## K-Means Clustering
+
+K-means partitions observations into $K$ clusters by minimizing
+within-cluster squared distance:
+
+$$
+\sum_{k=1}^{K}\sum_{i\in C_k}\|x_i-\bar x_k\|^2.
+$$
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+set.seed(571)
+km3 <- kmeans(x, centers = 3, nstart = 20)
+km3$cluster
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from sklearn.cluster import KMeans
+
+km3 = KMeans(n_clusters=3, n_init=20, random_state=571).fit(x)
+print(km3.labels_)
+```
+
+:::
+
+The analyst chooses $K$. Common aids include within-cluster sum of
+squares, silhouette summaries, stability checks, and interpretability
+of cluster profiles. None of these automatically proves the "true"
+number of clusters.
+
+## Hierarchical Clustering
+
+Hierarchical clustering builds a tree of nested groupings. It requires
+a distance metric and linkage rule.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+hc_complete <- hclust(dist(x), method = "complete")
+plot(hc_complete)
+rect.hclust(hc_complete, k = 3)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+from scipy.cluster.hierarchy import dendrogram, fcluster, linkage
+import matplotlib.pyplot as plt
+
+hc_complete = linkage(x, method="complete")
+dendrogram(hc_complete)
+plt.show()
+clusters = fcluster(hc_complete, t=3, criterion="maxclust")
+```
+
+:::
+
+Complete linkage tends to create compact clusters. Single linkage can
+chain observations together. Average linkage is often a middle ground.
+Changing linkage can change the dendrogram, so the choice should be
+reported.
+
+## Scaling and Distance
+
+Clustering is often dominated by scale. If one variable has a much
+larger numeric range, Euclidean distance will emphasize that variable.
+Standardization is common, but it is not automatic truth. Scaling says
+that one standard deviation in each variable should count equally.
+
+Outliers also matter. A small number of unusual observations can affect
+cluster centers, dendrogram structure, and PCA directions. The opening
+analysis should therefore include summaries, plots, and sensitivity
+checks.
+
+## Cluster Profiles
+
+Clusters become useful when they can be described. After assigning
+clusters, summarize original variables by cluster:
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: false
+#| fig-align: center
+aggregate(USArrests, by = list(cluster = km3$cluster), mean)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: false
+#| fig-align: center
+profiles = us_arrests.assign(cluster=km3.labels_).groupby("cluster").mean()
+print(profiles)
+```
+
+:::
+
+Profiles should be written in the original measurement units when
+possible. A cluster label is not an explanation; it is a concise name
+for a pattern that must be interpreted in context.

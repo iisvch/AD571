@@ -1,0 +1,160 @@
+---
+title: "Interactions and Marginal Effects"
+---
+
+Interactions are the first place where a regression model stops being a
+collection of independent additive effects. They let the relationship
+between one predictor and the response depend on another predictor.
+
+## Learning Objectives
+
+- Write a regression model with an interaction term.
+- Interpret main effects when an interaction is present.
+- Compute marginal effects for binary-continuous and
+  continuous-continuous interactions.
+- Use plots to communicate conditional relationships.
+- Explain why interactions should be motivated by the question and
+  checked against the data.
+
+## Interaction Model
+
+For two predictors $X$ and $Z$, an interaction model is
+
+$$
+\operatorname{E}(Y \mid X,Z)
+= \beta_0 + \beta_1X + \beta_2Z + \beta_3XZ.
+$$
+
+The coefficient $\beta_3$ says how the slope of $X$ changes as $Z$
+changes. The marginal effect of $X$ is
+
+$$
+\frac{\partial \operatorname{E}(Y \mid X,Z)}{\partial X}
+= \beta_1 + \beta_3Z.
+$$
+
+The main effect $\beta_1$ is therefore the effect of $X$ when $Z=0$.
+If $Z=0$ is not substantively meaningful, centering $Z$ makes the main
+effect easier to explain.
+
+## Binary by Continuous Interaction
+
+Suppose the return to advertising differs by whether a campaign is
+digital-first. The model includes a continuous predictor, a binary
+indicator, and their product.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+set.seed(571)
+n <- 250
+campaign <- data.frame(
+  spend = runif(n, 10, 100),
+  digital = rbinom(n, size = 1, prob = 0.45)
+)
+campaign$sales <- 20 + 0.55 * campaign$spend +
+  7 * campaign$digital +
+  0.35 * campaign$spend * campaign$digital +
+  rnorm(n, sd = 8)
+
+fit_interaction <- lm(sales ~ spend * digital, data = campaign)
+summary(fit_interaction)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: true
+#| fig-align: center
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+
+rng = np.random.default_rng(571)
+n = 250
+campaign = pd.DataFrame({
+    "spend": rng.uniform(10, 100, n),
+    "digital": rng.binomial(1, 0.45, n)
+})
+campaign["sales"] = (
+    20 + 0.55 * campaign["spend"] +
+    7 * campaign["digital"] +
+    0.35 * campaign["spend"] * campaign["digital"] +
+    rng.normal(0, 8, n)
+)
+
+fit_interaction = smf.ols("sales ~ spend * digital", data=campaign).fit()
+print(fit_interaction.summary())
+```
+
+:::
+
+The slope for non-digital campaigns is $\beta_1$. The slope for
+digital-first campaigns is $\beta_1+\beta_3$. The intercept difference
+is not the whole story because the gap between groups changes with
+spending.
+
+## Continuous by Continuous Interaction
+
+When both predictors are continuous, the effect of each predictor is a
+function of the other. A coefficient table alone is rarely enough. Use
+predicted values over a grid of meaningful values.
+
+:::{.panel-tabset group="language"}
+
+## R
+
+```{r}
+#| echo: true
+#| eval: true
+#| fig-align: center
+new_grid <- expand.grid(
+  spend = seq(10, 100, length.out = 50),
+  digital = c(0, 1)
+)
+new_grid$predicted_sales <- predict(fit_interaction, newdata = new_grid)
+head(new_grid)
+```
+
+## Python
+
+```{python}
+#| echo: true
+#| eval: true
+#| fig-align: center
+new_grid = pd.DataFrame({
+    "spend": np.tile(np.linspace(10, 100, 50), 2),
+    "digital": np.repeat([0, 1], 50)
+})
+new_grid["predicted_sales"] = fit_interaction.predict(new_grid)
+print(new_grid.head())
+```
+
+:::
+
+This prediction-grid approach also works for interactions between
+income and age, education and experience, price and promotion, or any
+other pair where the substantive effect is conditional.
+
+## Standard Errors for Marginal Effects
+
+For a continuous-continuous interaction, the marginal effect
+$\beta_1+\beta_3Z$ has uncertainty because it depends on two estimated
+coefficients. Its variance is
+
+$$
+\operatorname{Var}(\hat\beta_1 + z\hat\beta_3)
+= \operatorname{Var}(\hat\beta_1)
++ z^2\operatorname{Var}(\hat\beta_3)
++ 2z\operatorname{Cov}(\hat\beta_1,\hat\beta_3).
+$$
+
+The uncertainty can be narrow in some regions of $Z$ and wide in
+others. This is why marginal-effect plots are often more honest than a
+single starred interaction coefficient.
